@@ -20,5 +20,22 @@ Each update should include the following information:
 
 ## 📝 Updates
 
-#### Date goes here
-Your update here.
+#### 5/18/2026
+
+**Progress from last week**
+
+* Picked out a general topic (Data Centers)
+** Thought about some potential subtopics:
+*** Local economy (jobs, house prices, development rates)
+*** Heath (water, air, sound)
+*** International angle
+* Did some initial digging into potential data sources for the data center locations + specifications
+* Looked at some research papers that had been done on similar subtopics
+
+**Plan for next week**
+
+* PLAN
+
+**Evaluation of overall timeline**
+
+It seems like we are on track to complete the Project Proposal on time, but we will need to really spend some time finalizing a subtopic and coming up with adequate data sources. If this is not done by next class time, that would be cause for concern.
