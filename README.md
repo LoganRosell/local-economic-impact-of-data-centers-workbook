@@ -1,93 +1,80 @@
 # Group Charter
 
 ## 👥 Group Name
-Pick a group name that represents your personalities and/or goals.
-List the names of your group members.
-
+Same Life Same Project: Ian & Logan
 
 ## ⭐ Group Values & Goals
 #### What principles do you want to uphold as a group? (e.g., respect, honesty, curiosity, accountability)
-List your answers here.
+Accountability, curiosity, mutual respect
 
 #### How will you make decisions? (e.g., vote, consensus, delegation)
-Your answer here.
+Consensus, we're often on the same page anyways.
 
 #### What happens if rules are broken or group norms are ignored?
-Your answer here.
+We will discuss it thoroughly and work out a plan to improve going forward.
 
 #### How do you define when something is “done”?
-Your answer here.
+When both group members agree that the product is sufficient.
 
 #### How will you give and receive feedback constructively?
-Your answer here.
+In our weekly meetings, we will try to be open and honest but fair to each other.
 
 
 ## 🧠 Group Skills & Strengths
 
 | Group Member | Strengths / Skills | Preferred Tasks | Less Preferred Tasks |
 |-------------|--------------------|------------------|-----------------------|
-|             |                    |                  |                       |
-|             |                    |                  |                       |
+| Ian Walsh | Problem Solving + Machine Learning + SQL | Data Engineering + Visualization | Raw Python/R Code |
+| Logan Rosell | Regression & Modeling + Learning/Research/Literature | Editing | N/A |
 
 ### Project-Specific Reflection
 #### Are there areas where your group feels collectively weaker?
-Your answer here.
+Coming up with realistic goals that are achievable and not over-reaching. Basically scope creep.
 
 #### How will you handle or prepare for those parts of the project?
-Your answer here.
+Be realistic about our possibilities and what is doable with our data.
 
 #### How can you assign tasks based on strengths and preferences?
-Your answer here.
+Talk about each task on an individual basis and see what plays to our strengths for each one.
 
 
 ## 💬 Communication Plan
 #### How often will you meet or check in outside of class?
-
-Your answer here
+At least once per week in the hour before class, but also on weekends as needed.
 
 #### What communication tools will you use? (e.g., Discord, email, group chat, in-person)
-
-Your answer here
+Text/Discord
 
 #### What will you cover in each check-in? (e.g., updates, roadblocks, planning next steps)
-
-Your answer here
+Updates, planning next steps, what to say in our weekly check-in, things we've done
 
 #### What is a reasonable response time for messages?
-
-Your answer here
+24 hours
 
 #### How will you handle urgent or time-sensitive decisions?
-
-Your answer here
+Phone Call
 
 
 ## 🧰 Working Style & Preferences
 #### What work hours or time blocks work best for each of you?
-
-Your answer here
+4-6pm weekdays, weekends
 
 #### Do you prefer to meet in short bursts or long sessions?
-
-Your answer here
+Long Sessions
 
 #### How will you handle changes in availability or unforeseen obstacles?
-
-Your answer here
+Talk to each other.
 
 
 ## 🧯 Conflict Resolution Plan
 #### How will you handle disagreements?
-
-Your answer here
+Talk it through, state where we're each coming from and try to remove emotion as much as possible.
 
 #### What’s your plan if one group member isn’t meeting expectations?
-
-Your answer here
+Have an intervention.
 
 #### When should you bring concerns to the instructor?
-
-Your answer here
+If one group member is falling unreasonably behind or causing excessive conflict.
 
 
 ## ✅ Commitment & Signatures
@@ -95,5 +82,5 @@ Your answer here
 
 | Name |  Date |
 |------|-------|
-|      |       |
-|      |       |
+| Ian Walsh | 5/18/26 |
+| Logsn Roell| 05/18/2026      |
