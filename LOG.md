@@ -25,16 +25,19 @@ Each update should include the following information:
 **Progress from last week**
 
 * Picked out a general topic (Data Centers)
-** Thought about some potential subtopics:
-*** Local economy (jobs, house prices, development rates)
-*** Heath (water, air, sound)
-*** International angle
+  * Thought about some potential subtopics:
+    * Local economy (jobs, house prices, development rates)
+    * Heath (water, air, sound)
+    * International angle
 * Did some initial digging into potential data sources for the data center locations + specifications
-* Looked at some research papers that had been done on similar subtopics
+* Looked at some research papers that had been done on similar subtopics.
+* Started thinking about potential model ideas and research questions
 
 **Plan for next week**
 
-* PLAN
+* Come up with a definite research question
+* Try to find more supporting data (is there time data we can use, will we need to web scrape?)
+* Discuss potential angles and fallbacks if our main idea doesn't work.
 
 **Evaluation of overall timeline**
 
