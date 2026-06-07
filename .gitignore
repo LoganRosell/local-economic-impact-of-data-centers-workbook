@@ -1,4 +1,17 @@
+# OS Files
 .DS_Store
+Thumbs.db
+
+# Environment (Holds secrest)
+*.env
+
+# Data sources (too large for git)
 **/*.csv
 **/*.xls
 **/*.xlsx
+
+# VS code settings
+.vscode/
+
+# Log files
+*.log
