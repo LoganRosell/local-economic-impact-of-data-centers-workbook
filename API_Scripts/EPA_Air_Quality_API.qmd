@@ -1,0 +1,75 @@
+
+```{python}
+import requests
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+email = os.getenv('EMAIL')
+api_key = os.getenv('API_KEY')
+```
+
+```{python}
+
+
+# function to return dictionary of all state codes the API will accept
+def get_state_codes():
+    url = f"https://aqs.epa.gov/data/api/list/states?email={email}&key={api_key}"
+
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        state_data = response.json()
+        state_dict = {item['code']: item['value_represented'] for item in state_data['Data']}
+        #state_codes = [item['code'] for item in state_data['Data']]
+        return state_dict
+
+    else:
+        output = print(f"Error: Failed to retrieve data. Status Code: {response.status_code}")
+        return output
+```
+
+```{python}
+# Remove teritories and foreign counties from state codes dictionary
+
+def remove_non_states(states_dict):
+    exclusions = {'Guam', 'Puerto Rico', 'Virgin Islands', 'Country Of Mexico', 'Canada'}
+
+    cleaned_states = {k: v for k, v in states_dict.items() if v not in exclusions}
+    return cleaned_states
+
+```
+
+
+```{python}
+
+def all_counties_in_state(state_codes):
+    all_counties = {}
+    for i in state_codes:
+        url = f"https://aqs.epa.gov/data/api/list/countiesByState?email={email}&key={api_key}&state={i}"
+        
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            county_data = response.json()
+            county_codes = [item['code'] for item in county_data['Data']]
+            all_counties[i] = county_codes
+            print(f"Retrieved {len(county_codes)} counties for State {i}")
+
+        else:
+            print(f"Error: Failed to retrieve data. Status Code: {response.status_code}")
+            continue
+    return all_counties
+
+```
+
+
+```{python}
+# run all functions
+
+state_codes = get_state_codes()
+state_codes = remove_non_states(state_codes)
+counties_dict = all_counties_in_state(state_codes)
+print(f"total counties found: {sum(len(v) for v in counties_dict.values())}")
+
+```
