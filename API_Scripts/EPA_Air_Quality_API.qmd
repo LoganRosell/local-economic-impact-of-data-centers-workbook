@@ -3,10 +3,44 @@
 import requests
 from dotenv import load_dotenv
 import os
+import time
 
 load_dotenv()
-email = os.getenv('EMAIL')
-api_key = os.getenv('API_KEY')
+email = os.getenv('EPA_AQS_EMAIL')
+api_key = os.getenv('EPA_AQS_API_KEY')
+```
+
+```{python}
+ # increment request count
+ def add_request_count():
+    global request_count
+    request_count += 1
+```
+
+
+```{python}
+# forces a pause if rate limit has been exceeded
+def may_i_pass():
+    global request_count, last_pause_time, rate_limit
+    current_time = time.time()
+    elapsed_time = current_time - last_pause_time
+    if elapsed_time > 60:
+        request_count = 0
+        last_pause_time = current_time
+    if request_count >= rate_limit:
+        print("you may not pass, you must wait a bit")
+        time.sleep(60 - elapsed_time)
+
+```
+
+```{python}
+# checks rate limit and waits 5 seconds after each request returns api response
+def respectful_request(url):
+    may_i_pass()
+    response = requests.get(url)
+    time.sleep(5)
+    add_request_count()
+    return response
 ```
 
 ```{python}
@@ -16,7 +50,9 @@ api_key = os.getenv('API_KEY')
 def get_state_codes():
     url = f"https://aqs.epa.gov/data/api/list/states?email={email}&key={api_key}"
 
-    response = requests.get(url)
+
+    response = respectful_request(url)
+
 
     if response.status_code == 200:
         state_data = response.json()
@@ -48,7 +84,7 @@ def all_counties_in_state(state_codes):
     for i in state_codes:
         url = f"https://aqs.epa.gov/data/api/list/countiesByState?email={email}&key={api_key}&state={i}"
         
-        response = requests.get(url)
+        response = respectful_request(url)
 
         if response.status_code == 200:
             county_data = response.json()
@@ -65,7 +101,24 @@ def all_counties_in_state(state_codes):
 
 
 ```{python}
+# return annual summary data for specific state, county, year, parameter
+def get_annual_summary_data(state_code, county_code, year, parameter_code):
+    url = f"https://aqs.epa.gov/data/api/annualData/byCounty?email={email}&key={api_key}&param={parameter_code}&bdate={year}0101&edate={year}1231&state={state_code}&county={county_code}"
+
+    response = respectful_request(url)
+
+    print(response.json())
+```
+
+
+```{python}
 # run all functions
+
+# initalize global variables
+request_count = 0
+last_pause_time = time.time()
+# max requests per minute
+rate_limit = 10
 
 state_codes = get_state_codes()
 state_codes = remove_non_states(state_codes)
@@ -73,3 +126,4 @@ counties_dict = all_counties_in_state(state_codes)
 print(f"total counties found: {sum(len(v) for v in counties_dict.values())}")
 
 ```
+
