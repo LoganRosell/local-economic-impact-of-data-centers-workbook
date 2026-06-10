@@ -12,11 +12,10 @@ api_key = os.getenv('EPA_AQS_API_KEY')
 
 ```{python}
  # increment request count
- def add_request_count():
+def add_request_count():
     global request_count
     request_count += 1
 ```
-
 
 ```{python}
 # forces a pause if rate limit has been exceeded
@@ -37,10 +36,19 @@ def may_i_pass():
 # checks rate limit and waits 5 seconds after each request returns api response
 def respectful_request(url):
     may_i_pass()
-    response = requests.get(url)
+    response = session.get(url)
     time.sleep(5)
     add_request_count()
     return response
+```
+
+```{python}
+# return the current status of the API to make sure it is online
+def check_api_status():
+    url = "https://aqs.epa.gov/data/api/metaData/isAvailable"
+    response = session.get(url, timeout= 10)
+    status_message = response.json()
+    return status_message
 ```
 
 ```{python}
@@ -113,6 +121,9 @@ def get_annual_summary_data(state_code, county_code, year, parameter_code):
 
 ```{python}
 # run all functions
+
+# initalize a session which saves connection info for reuse upon later API requests
+session = requests.Session()
 
 # initalize global variables
 request_count = 0
