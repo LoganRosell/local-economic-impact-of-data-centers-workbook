@@ -4,6 +4,8 @@ import requests
 from dotenv import load_dotenv
 import os
 import time
+import pandas as pd
+import numpy as np
 
 load_dotenv()
 email = os.getenv('EPA_AQS_EMAIL')
@@ -36,7 +38,7 @@ def may_i_pass():
 # checks rate limit and waits 5 seconds after each request returns api response
 def respectful_request(url):
     may_i_pass()
-    response = session.get(url)
+    response = session.get(url, timeout=(3.05, 15))
     time.sleep(5)
     add_request_count()
     return response
@@ -114,8 +116,21 @@ def get_annual_summary_data(state_code, county_code, year, parameter_code):
     url = f"https://aqs.epa.gov/data/api/annualData/byCounty?email={email}&key={api_key}&param={parameter_code}&bdate={year}0101&edate={year}1231&state={state_code}&county={county_code}"
 
     response = respectful_request(url)
+    response = response.json()
 
-    print(response.json())
+    # handleing bad request responses
+    if response['Header'][0]['status'] == 'Failed':
+        return f"REQUEST FAILED for state: {state_code}, county: {county_code}, year: {year}, parameter: {parameter_code}"
+    # handeling no data responses
+    if response['Header'][0]['status'] == 'No data matched your selection':
+        return f"NO DATA for state: {state_code}, county: {county_code}, year: {year}, parameter: {parameter_code}"
+    
+    if response['Header'][0]['status'] == 'Success':
+        response = response['Data']
+        response = pd.DataFrame(response)
+        return response
+    
+    return f"SOMETHING UNEXPECTED OCCURED for state: {state_code}, county: {county_code}, year: {year}, parameter: {parameter_code}"
 ```
 
 
@@ -125,16 +140,35 @@ def get_annual_summary_data(state_code, county_code, year, parameter_code):
 # initalize a session which saves connection info for reuse upon later API requests
 session = requests.Session()
 
-# initalize global variables
+# initalize global request tracking variables
 request_count = 0
 last_pause_time = time.time()
 # max requests per minute
 rate_limit = 10
 
+script_start_time = time.time()
+
 state_codes = get_state_codes()
 state_codes = remove_non_states(state_codes)
-counties_dict = all_counties_in_state(state_codes)
-print(f"total counties found: {sum(len(v) for v in counties_dict.values())}")
 
+counties_dict = all_counties_in_state(state_codes)
+script_end_time = time.time()
+print(f"total counties found: {sum(len(v) for v in counties_dict.values())}")
+print(f"this process took {script_end_time - script_start_time} seconds to complete")
+
+
+```
+
+```{python}
+#test loop
+
+test_counties_dict = {'01':['001', '003'], '02': ['010', '013']}
+test_year_range = np.arange(2001,2002)
+for t in test_year_range:
+    for current_state in test_counties_dict:
+        counties_list = test_counties_dict[current_state]
+        for k in counties_list:
+            print(get_annual_summary_data(current_state, k, str(t), "88101"))
+            print(f"year: {t}, state: {current_state}, county: {k}")
 ```
 
