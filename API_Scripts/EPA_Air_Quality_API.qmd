@@ -113,6 +113,7 @@ def all_counties_in_state(state_codes):
 ```{python}
 # return annual summary data for specific state, county, year, parameter
 def get_annual_summary_data(state_code, county_code, year, parameter_code):
+    global success_count, fail_count
     url = f"https://aqs.epa.gov/data/api/annualData/byCounty?email={email}&key={api_key}&param={parameter_code}&bdate={year}0101&edate={year}1231&state={state_code}&county={county_code}"
 
     response = respectful_request(url)
@@ -120,16 +121,20 @@ def get_annual_summary_data(state_code, county_code, year, parameter_code):
 
     # handleing bad request responses
     if response['Header'][0]['status'] == 'Failed':
+        fail_count += 1
         return f"REQUEST FAILED for state: {state_code}, county: {county_code}, year: {year}, parameter: {parameter_code}"
     # handeling no data responses
     if response['Header'][0]['status'] == 'No data matched your selection':
+        fail_count += 1
         return f"NO DATA for state: {state_code}, county: {county_code}, year: {year}, parameter: {parameter_code}"
     
     if response['Header'][0]['status'] == 'Success':
         response = response['Data']
         response = pd.DataFrame(response)
+        success_count += 1
         return response
     
+    fail_count += 1
     return f"SOMETHING UNEXPECTED OCCURED for state: {state_code}, county: {county_code}, year: {year}, parameter: {parameter_code}"
 ```
 
@@ -161,14 +166,21 @@ print(f"this process took {script_end_time - script_start_time} seconds to compl
 
 ```{python}
 #test loop
+success_count = 0
+fail_count = 0
 
-test_counties_dict = {'01':['001', '003'], '02': ['010', '013']}
-test_year_range = np.arange(2001,2002)
+
+script_end_time = time.time()
+test_counties_dict = {k: counties_dict[k] for k in list(counties_dict)[:1]}
+test_year_range = np.arange(2001,2005)
 for t in test_year_range:
     for current_state in test_counties_dict:
         counties_list = test_counties_dict[current_state]
         for k in counties_list:
             print(get_annual_summary_data(current_state, k, str(t), "88101"))
             print(f"year: {t}, state: {current_state}, county: {k}")
+print(f"this process took {script_end_time - script_start_time} seconds to complete")
+print(f"success rate: {success_count/(success_count+fail_count)}")
+
 ```
 
