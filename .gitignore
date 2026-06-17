@@ -15,3 +15,6 @@ Thumbs.db
 
 # Log files
 *.log
+
+# Specific folders
+shared_data/
