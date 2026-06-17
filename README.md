@@ -84,12 +84,3 @@ If one group member is falling unreasonably behind or causing excessive conflict
 |------|-------|
 | Ian Walsh | 5/18/26 |
 | Logan Rosell| 05/18/2026 |
-
-# Project Setup
-
-## Database Setup
-
-### GDP Table
-
-1. Run SQL script `sql_scripts/create_gdp_table.sql`
-2. Import csv manually or via GUI
