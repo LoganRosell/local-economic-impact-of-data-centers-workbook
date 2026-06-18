@@ -22,7 +22,7 @@ load_dotenv()
 
 ```{python}
 data_dir = Path(os.environ["DATA_DIR"])
-csv_path = data_dir / "personal_income_data.csv"
+csv_path = data_dir / "personal_income" /"CAINC1__ALL_AREAS_1969_2024.csv"
 ```
 
 ```{python}
@@ -68,44 +68,20 @@ df_final["GeoFIPS"] = df_final["GeoFIPS"].str.replace('"','')
 df_final = df_final[df_final["GeoName"].str.contains(',', na = False)].reset_index(drop=True)
 ```
 
-```{python}
-# Now split county and state into their own columns
-df_final[["county", "state_code"]] = df_final['GeoName'].str.split(', ', n=1, expand = True)
-```
+### Only Keep Necessary Columns
 
 ```{python}
-# Check
-df_check = df_final[df_final["county"].str.contains(',') | df_final["state_code"].str.contains(',')]
-```
-
-It looks like there are a bunch of "independent cities" in Virginia that are causing problems. They are lumped into the nearest county though for FIPS so we'll just remove them from the state_code column
-
-```{python}
-df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
-```
-
-
-Some of the state codes also have a trailing `*` that we'll want to remove
-
-```{python}
-df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
-```
-
-```{python}
-# Drop GeoName and empty column
-df_final = df_final.drop(columns = ["GeoName", np.nan])
+df_final = df_final[['GeoFIPS', 'Per capita personal income (dollars) 2/', 'Personal income (thousands of dollars) ', 'Population (persons) 1/', 'year']]
 ```
 
 ### Update column names
 
 ```{python}
-df_final.columns = df_final.columns.str.strip()
-
-# Then rename columns
 df_final = df_final.rename(columns={
-    "Per capita personal income (dollars) 2/": "Per Capita Personal Income (dollars)",
-    "Personal income (thousands of dollars)": "Personal Income (thousands of dollars)",
-    "Population (persons) 1/": "Population"
+    "GeoFIPS": "county_id",
+    "Per capita personal income (dollars) 2/": "per_capita_personal_income_dollars",
+    "Personal income (thousands of dollars) ": "personal_income_dollars_thousands",
+    "Population (persons) 1/": "population"
 })
 ```
 
@@ -114,7 +90,7 @@ df_final = df_final.rename(columns={
 ```{python}
 df_final["year"] = df_final["year"].astype(int)
 
-value_columns = ["Per Capita Personal Income (dollars)", "Personal Income (thousands of dollars)", "Population"]
+value_columns = ["per_capita_personal_income_dollars", "personal_income_dollars_thousands", "population"]
 
 for col in value_columns:
     df_final[col] = pd.to_numeric(
@@ -139,7 +115,7 @@ income_means_year = df_final.groupby('year')[value_columns].mean()
 
 #### Average Per Capita Income Over Time
 ```{python}
-sns.lineplot(income_means_year, x='year', y='Per Capita Personal Income (dollars)')
+sns.lineplot(income_means_year, x='year', y='per_capita_personal_income_dollars')
 
 plt.title("Average Per Capita Personal Income Over Time")
 plt.xlabel("Year")
