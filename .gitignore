@@ -16,5 +16,8 @@ Thumbs.db
 # Log files
 *.log
 
+# Markdown file stuff
+*_files/
+
 # Specific folders
 shared_data/

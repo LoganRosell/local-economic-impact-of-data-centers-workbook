@@ -83,4 +83,4 @@ If one group member is falling unreasonably behind or causing excessive conflict
 | Name |  Date |
 |------|-------|
 | Ian Walsh | 5/18/26 |
-| Logsn Roell| 05/18/2026      |
+| Logan Rosell| 05/18/2026 |
