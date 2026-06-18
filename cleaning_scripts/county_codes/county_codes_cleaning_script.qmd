@@ -1,0 +1,68 @@
+author: Logan Rosell
+
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+load_dotenv()
+```
+
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+csv_path = data_dir / "county_fips_codes" / "county_2020_fips_codes.csv"
+```
+
+
+```{python}
+df_raw = pd.read_csv(
+    csv_path, 
+    encoding='latin-1', 
+    delimiter="|", 
+    dtype={'STATEFP': str, 'COUNTYFP': str, 'COUNTYNS': str}
+)
+```
+
+
+```{python}
+df_final = df_raw.rename(columns={
+    "STATE": "state",
+    "STATEFP": "state_fips_code",
+    "COUNTYFP": "county_fips_code",
+    "COUNTYNS": "county_ns_code",
+    "COUNTYNAME": "county_name",
+    "CLASSFP": "fips_class_code",
+    "FUNCSTAT": "functional_status"
+})
+```
+
+```{python}
+df_final["combined_state_county_code"] = df_final["state_fips_code"] + df_final["county_fips_code"]
+```
+
+
+```{python}
+df_final.describe()
+```
+
+
+```{python}
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+
+```{python}
+df_final.to_sql(
+    "us_counties",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
