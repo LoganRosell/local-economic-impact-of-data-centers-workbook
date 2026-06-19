@@ -21,7 +21,7 @@ load_dotenv()
 
 ```{python}
 data_dir = Path(os.environ["DATA_DIR"])
-csv_path = data_dir / "gdp_data.csv"
+csv_path = data_dir / "gdp" / "gdp_data.csv"
 ```
 
 ```{python}
