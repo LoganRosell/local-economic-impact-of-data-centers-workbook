@@ -1,0 +1,109 @@
+author: Logan Rosell
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+load_dotenv()
+```
+
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+csv_path = data_dir / "air" / "Daily_County-Level_PM2.5_Concentrations_2001-2022_20260611.csv"
+```
+
+
+```{python}
+df_raw = pd.read_csv(
+    csv_path,
+    dtype = {"year": int, "statefips": str, "countyfips": str, "pm25_max_pred": str}
+)
+```
+
+### Data Transformations
+- Add leading zeros to statefips and countyfips columns 
+- concateonate statefips and countyfips columns to create county_id column
+- Remove commas from pm25_max_pred column and convert data type to float
+- combine all rows with the same county and year values into one row representing the average for that county in that year (do this for mean pred and max pred)
+- update column names to reflect annual aggregation 
+- compute the yearly standard deviation for each county for mean daily pred
+
+```{python}
+# add leading zeros to state and county fips codes
+df_raw["statefips"] = df_raw["statefips"].astype(str).str.zfill(2)
+
+df_raw["countyfips"] = df_raw["countyfips"].astype(str).str.zfill(3)
+```
+
+```{python}
+# combind state and county fips codes to create county_id column
+df_raw["county_id"] = df_raw["statefips"] + df_raw["countyfips"]
+```
+
+```{python}
+# remove all commas from pm25_max_pred column
+df_raw['pm25_max_pred'] = df_raw['pm25_max_pred'].str.replace(',', '')
+df_raw["pm25_max_pred"] = df_raw["pm25_max_pred"].astype(float)
+```
+
+```{python}
+# remove uneeded columns
+df_raw = df_raw.drop(columns=["date", "statefips", "countyfips"])
+```
+
+```{python}
+# aggregate all values to be average for a given county in a given year
+df_final = df_raw.groupby(by=["year", "county_id"], as_index=False).mean()
+```
+
+```{python}
+# update columns names to reflect applied annual aggregation
+df_final = df_final.rename(columns={
+    "pm25_max_pred": "pm25_max_daily_avg",
+    "pm25_med_pred": "pm25_med_daily_avg",
+    "pm25_mean_pred": "pm25_mean_daily_avg",
+    "pm25_pop_pred": "pm25_pop_daily_avg"
+})
+```
+
+```{python}
+# calcuate annual standard deviation for each measure
+df_sd = df_raw.groupby(by=["year", "county_id"], as_index=False).std()
+```
+
+```{python}
+# update column names to reflect standard deviation calcuation
+df_sd = df_sd.rename(columns={
+    "pm25_max_pred": "pm25_max_sd",
+    "pm25_med_pred": "pm25_med_sd",
+    "pm25_mean_pred": "pm25_mean_sd",
+    "pm25_pop_pred": "pm25_pop_sd"
+})
+```
+
+```{python}
+# merge sd columns into final_df
+df_final = pd.merge(df_sd, df_final, on = ["year", "county_id"], how = "left")
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+# export cleaned data to sql table in local db
+df_final.to_sql(
+    "air_quality",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
