@@ -1,0 +1,29 @@
+---
+title: "water_cleaning"
+format: html
+---
+
+# Water Cleaning Script
+
+## Import Raw Data
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+load_dotenv()
+```
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+water_dir = data_dir / "water"
+```
+
+```{python}
+csv_files = list(water_dir.global("*.csv"))
+```

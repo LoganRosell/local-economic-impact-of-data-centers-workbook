@@ -1,0 +1,535 @@
+---
+title: "USGS Water API"
+format: html
+---
+
+# USGS Water API
+
+```{python}
+import requests
+from dotenv import load_dotenv
+import os
+import time
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+load_dotenv()
+
+api_key = os.getenv('USGS_API_KEY')
+```
+
+## Load All County Codes
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+csv_path = data_dir / "county_fips_codes" / "county_2020_fips_codes.csv"
+```
+
+```{python}
+df_fips = pd.read_csv(csv_path, delimiter = "|", dtype = str)
+```
+
+```{python}
+df_fips = df_fips.rename(columns={
+    "STATEFP": "state_code",
+    "COUNTYFP": "county_code"
+})
+```
+
+```{python}
+df_fips['fips'] = df_fips['state_code'] + df_fips['county_code']
+
+fips_dict = (
+    df_fips.set_index("fips")[["state_code", "county_code"]].to_dict(orient = "index")
+)
+```
+
+## Generate a list of monitoring locations
+
+### First Get County Files
+```{python}
+base_url = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/monitoring-locations/items"
+
+out_dir = Path("usgs_monitoring_locations")
+county_dir = out_dir / "county_files"
+
+out_dir.mkdir(exist_ok=True)
+county_dir.mkdir(exist_ok=True)
+
+failed_rows = []
+
+session = requests.Session()
+session.headers.update({"X-Api-Key": api_key})
+session.headers.update({"Accept": "application/geo+json"})
+
+max_attempts_per_county = 4
+sleep_between_requests = 4
+
+for fips, vals in fips_dict.items():
+    state_code = vals["state_code"]
+    county_code = vals["county_code"]
+    county_path = county_dir / f"sites_{fips}.csv"
+
+    if county_path.exists():
+        print(f"Skipping {fips}, already exists")
+        continue
+
+    attempt = 0
+    county_done = False 
+
+    while attempt < max_attempts_per_county and not county_done:
+        attempt += 1
+        county_rows = []
+        rate_limited = False
+
+        try:
+            params = {
+                "f": "json",
+                "lang": "en-US",
+                "limit": 50000,
+                "properties": "id,monitoring_location_number,monitoring_location_name,state_code,county_code",
+                "skipGeometry": "false",
+                "state_code": state_code,
+                "county_code": county_code
+            }
+
+            next_url = base_url
+            first_request = True
+            county_total = 0
+
+            while next_url:
+                if first_request:
+                    response = session.get(next_url, params=params, timeout=60)
+                else:
+                    response = session.get(next_url, timeout=60)
+
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    wait_time = int(retry_after) if retry_after and retry_after.isdigit() else 30
+                    print(f"{fips} attempt {attempt} got 429, waiting {wait_time} seconds...")
+                    rate_limited = True
+                    time.sleep(wait_time)
+                    break
+
+                response.raise_for_status()
+
+                remaining = response.headers.get("X-RateLimit-Remaining")
+                limit = response.headers.get("X-RateLimit-Limit")
+                if remaining is not None and limit is not None:
+                    print(f"{fips}: rate limit remaining {remaining}/{limit}")
+
+                data = response.json()
+                features = data.get("features", [])
+                
+                if not features:
+                    break
+                
+                county_total += len(features)
+
+                for feat in features:
+                    properties = feat.get("properties", {}).copy()
+                    geom = feat.get("geometry")
+
+                    if geom and geom.get("coordinates"):
+                        properties["longitude"] = geom["coordinates"][0]
+                        properties["latitude"] = geom["coordinates"][1]
+                    else:
+                        properties["longitude"] = None
+                        properties["latitude"] = None
+
+                    properties["county_fips"] = fips
+                    county_rows.append(properties)
+
+                print(f"{fips}: fetched {len(features)} rows this page, {county_total} total so far")
+                
+                next_link = None
+                for link in data.get("links", []):
+                    if link.get("rel") == "next":
+                        next_link = link.get("href")
+                        break
+
+                next_url = next_link
+                first_request = False
+                time.sleep(sleep_between_requests)
+
+            if rate_limited:
+                continue
+
+            county_df = pd.DataFrame(county_rows)
+
+            if "id" in county_df.columns:
+                county_df = county_df.drop_duplicates(subset=["id"])
+            else:
+                county_df = county_df.drop_duplicates()
+
+            county_df.to_csv(county_path, index = False)
+            
+            print(f"Saved {fips} -> {county_path.name} ({len(county_df):,} rows)")
+            county_done = True
+            break
+
+        except Exception as e:
+            print(f"Attempt {attempt} failed for {fips}: {e}")
+            if attempt == max_attempts_per_county:
+                failed_rows.append({
+                    "county_fips": fips,
+                    "state_code": state_code,
+                    "county_code": county_code,
+                    "error": str(e)
+                })
+                print(f"FINAL FAILED {fips}: {e}")
+            else:
+                time.sleep(10 * attempt)
+
+    if not county_done and not county_path.exists():
+        failed_rows.append({
+            "county_fips": fips,
+            "state_code": state_code,
+            "county_code": county_code,
+            "error": "Exceeded retry attempts without successful download"
+        })
+        print(f"FINAL FAILED {fips}: exceeded retry attempts")
+
+failed_df = pd.DataFrame(failed_rows)
+failed_df.to_csv(out_dir / "failed_counties.csv", index = False)
+```
+
+### Combine County Files into Final File
+
+```{python}
+all_county_files = sorted(county_dir.glob("sites_*.csv"))
+
+failed_files = []
+
+all_dfs = []
+for file in all_county_files:
+    try:
+        df = pd.read_csv(file, dtype=str)
+        all_dfs.append(df)
+        print(f"Loaded {file.name}: {len(df):,} rows")
+    except Exception as e:
+        print(f"Could not read {file.name}: {e}")
+        failed_files.append({
+            "file_name": file.name,
+            "reason": e
+            })
+
+
+national_df = pd.concat(all_dfs, ignore_index=True)
+print(len(national_df))
+
+if "id" in national_df.columns:
+    national_df = national_df.drop_duplicates(subset=["id"])
+else:
+    national_df = national_df.drop_duplicates()
+
+national_path = out_dir / "all_monitoring_locations.csv"
+national_df.to_csv(national_path, index = False)
+
+national_failed_df = pd.DataFrame(failed_files)
+national_failed_df.to_csv(out_dir / "national_failed_counties.csv", index = False)
+```
+
+## Water Data
+
+### First Get County Files
+
+```{python}
+base_url = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily/items"
+
+out_dir = Path("usgs_monitoring_locations")
+county_value_dir = out_dir / "county_value_files"
+
+out_dir.mkdir(exist_ok=True)
+county_value_dir.mkdir(exist_ok=True)
+
+failed_rows = []
+
+session = requests.Session()
+session.headers.update({"X-Api-Key": api_key})
+
+max_attempts_per_county = 4
+sleep_between_requests = 4
+
+for fips, vals in fips_dict.items():
+    state_code = vals["state_code"]
+    county_code = vals["county_code"]
+    county_value_path = county_value_dir / f"sites_{fips}.csv"
+
+    if county_value_path.exists():
+        print(f"Skipping {fips}, already exists")
+        continue
+
+    attempt = 0
+    county_done = False 
+
+    last_error = None
+
+    while attempt < max_attempts_per_county and not county_done:
+        attempt += 1
+        county_rows = []
+        rate_limited = False
+
+        try:
+            params = {
+                "f": "json",
+                "lang": "en-US",
+                "limit": 50000,
+                "properties": "time_series_id,monitoring_location_id,parameter_code,statistic_id,time,value,unit_of_measure",
+                "skipGeometry": "true",
+                "datetime": "2001-01-01T00:00:00Z/2023-12-31T23:59:59Z",
+                "state_code": state_code,
+                "county_code": county_code
+            }
+
+            next_url = base_url
+            first_request = True
+            county_total = 0
+
+            while next_url:
+                if first_request:
+                    response = session.get(next_url, params=params, timeout=60)
+                else:
+                    response = session.get(next_url, timeout=60)
+
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    wait_time = int(retry_after) if retry_after and retry_after.isdigit() else 30
+                    print(f"{fips} attempt {attempt} got 429, waiting {wait_time} seconds...")
+                    rate_limited = True
+                    time.sleep(wait_time)
+                    break
+
+                response.raise_for_status()
+
+                remaining = response.headers.get("X-RateLimit-Remaining")
+                limit = response.headers.get("X-RateLimit-Limit")
+                if remaining is not None and limit is not None:
+                    print(f"{fips}: rate limit remaining {remaining}/{limit}")
+
+                data = response.json()
+                features = data.get("features", [])
+                
+                if not features:
+                    break
+                
+                county_total += len(features)
+
+                for feat in features:
+                    properties = feat.get("properties", {}).copy()
+                    county_rows.append(properties)
+
+                print(f"{fips}: fetched {len(features)} rows this page, {county_total} total so far")
+                
+                next_link = None
+                for link in data.get("links", []):
+                    if link.get("rel") == "next":
+                        next_link = link.get("href")
+                        break
+
+                next_url = next_link
+                first_request = False
+                time.sleep(sleep_between_requests)
+
+            if rate_limited:
+                continue
+
+            county_value_df = pd.DataFrame(county_rows)
+
+            county_value_df = county_value_df.drop_duplicates()
+
+            county_value_df.to_csv(county_value_path, index = False)
+            
+            print(f"Saved {fips} -> {county_value_path.name} ({len(county_value_df):,} rows)")
+            county_done = True
+            break
+
+        except Exception as e:
+            last_error = str(e)
+            print(f"Attempt {attempt} failed for {fips}: {e}")
+            if attempt < max_attempts_per_county:
+                time.sleep(10 * attempt)
+
+    if not county_done and not county_value_path.exists():
+        failed_rows.append({
+            "county_fips": fips,
+            "state_code": state_code,
+            "county_code": county_code,
+            "error": last_error or "Exceeded retry attempts without successful download"
+        })
+        print(f"FINAL FAILED {fips}: {last_error or 'exceeded retry attempts without successful download'}")
+
+failed_value_df = pd.DataFrame(failed_rows)
+failed_value_df.to_csv(out_dir / "failed_value_counties.csv", index = False)
+```
+
+### Combine County Files into Final File
+
+```{python}
+all_county_value_files = sorted(county_value_dir.glob("sites_*.csv"))
+
+national_value_path = out_dir / "all_water_values.csv"
+done_path = out_dir / "combined_done_files.csv"
+failed_path = out_dir / "national_value_failed_counties.csv"
+
+failed_files = []
+
+if done_path.exists():
+    done_df = pd.read_csv(done_path, dtype = str)
+    done_files = set(done_df["file_name"].dropna())
+else:
+    done_files = set()
+
+header_written = national_value_path.exists() and national_value_path.stat().st_size > 0
+
+for file in all_county_value_files:
+    if file.name in done_files:
+        print(f"Skipping already combined: {file.name}")
+        continue
+    
+    try:
+        df = pd.read_csv(file, dtype=str)
+        df = df.drop_duplicates()
+
+        df.to_csv(
+            national_value_path,
+            mode = "a",
+            header = not header_written,
+            index = False
+        )
+
+        header_written = True
+
+        pd.DataFrame([{"file_name": file.name}]).to_csv(
+            done_path,
+            mode = "a",
+            header = not done_path.exists(),
+            index = False
+        )
+
+        done_files.add(file.name)
+
+        print(f"Finished {file.name}: {len(df):,} rows")
+
+    except Exception as e:
+        print(f"Could not read {file.name}: {e}")
+        failed_files.append({
+            "file_name": file.name,
+            "reason": str(e)
+            })
+
+
+if failed_files:
+    failed_df = pd.DataFrame(failed_files)
+    if failed_path.exists():
+        failed_df.to_csv(
+            failed_path,
+            mode = "a",
+            header = False,
+            index = False
+            )
+    else:
+        failed_df.to_csv(failed_path, index = False)
+```
+
+#### Duplicate Row Check
+
+```{python}
+national_value_path_dedup = out_dir / "all_water_values_dedup.csv"
+
+if national_value_path.exists() and national_value_path.stat().st_size >0:
+    print("Running a duplicate row check")
+    national_df = pd.read_csv(national_value_path, dtype = str)
+    before = len(national_df)
+
+    national_df = national_df.drop_duplicates()
+
+    after = len(national_df)
+    national_df.to_csv(national_value_path_dedup, index = False)
+
+    print(f"Duplication check complete: removed {before - after:,} duplicates, kept {after:,} rows")
+```
+
+## Parameter Info
+
+```{python}
+base_url = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/parameter-codes/items"
+
+out_dir = Path("usgs_monitoring_locations")
+parameter_path = out_dir / "parameter_info.csv"
+
+out_dir.mkdir(exist_ok=True)
+
+session = requests.Session()
+session.headers.update({"X-Api-Key": api_key})
+
+sleep_between_requests = 4
+
+try:
+    params = {
+        "f": "json",
+        "lang": "en-US",
+        "limit": 50000,
+        "properties": "id,parameter_name,unit_of_measure,parameter_group_code,parameter_description,medium",
+        "skipGeometry": "true"
+    }
+
+    next_url = base_url
+    first_request = True
+    total_codes = 0
+    total_rows = []
+
+    while next_url:
+        if first_request:
+            response = session.get(next_url, params=params, timeout=60)
+        else:
+            response = session.get(next_url, timeout=60)
+
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            wait_time = int(retry_after) if retry_after and retry_after.isdigit() else 30
+            print(f"Got 429, waiting {wait_time} seconds...")
+            time.sleep(wait_time)
+            continue
+
+        response.raise_for_status()
+
+        remaining = response.headers.get("X-RateLimit-Remaining")
+        limit = response.headers.get("X-RateLimit-Limit")
+        if remaining is not None and limit is not None:
+            print(f"Rate limit remaining {remaining}/{limit}")
+
+        data = response.json()
+        features = data.get("features", [])
+        
+        if not features:
+            break
+        
+        total_codes += len(features)
+
+        for feat in features:
+            properties = feat.get("properties", {}).copy()
+            total_rows.append(properties)
+
+        print(f"Fetched {len(features)} rows this page, {total_codes} total so far")
+        
+        next_link = None
+        for link in data.get("links", []):
+            if link.get("rel") == "next":
+                next_link = link.get("href")
+                break
+
+        next_url = next_link
+        first_request = False
+        time.sleep(sleep_between_requests)
+
+    parameters_df = pd.DataFrame(total_rows)
+    parameters_df = parameters_df.drop_duplicates()
+    parameters_df.to_csv(parameter_path, index = False)
+
+    print(f"Saved {parameter_path.name}: {len(parameters_df):,} rows")
+
+except Exception as e:
+    print(f"Attempt failed: {e}")
+```
