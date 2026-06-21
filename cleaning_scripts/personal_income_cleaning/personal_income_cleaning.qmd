@@ -22,7 +22,7 @@ load_dotenv()
 
 ```{python}
 data_dir = Path(os.environ["DATA_DIR"])
-csv_path = data_dir / "personal_income_data.csv"
+csv_path = data_dir / "personal_income" / "personal_income_data.csv"
 ```
 
 ```{python}
@@ -105,7 +105,8 @@ df_final.columns = df_final.columns.str.strip()
 df_final = df_final.rename(columns={
     "Per capita personal income (dollars) 2/": "Per Capita Personal Income (dollars)",
     "Personal income (thousands of dollars)": "Personal Income (thousands of dollars)",
-    "Population (persons) 1/": "Population"
+    "Population (persons) 1/": "Population",
+    "GeoFIPS": "county_id"
 })
 ```
 
