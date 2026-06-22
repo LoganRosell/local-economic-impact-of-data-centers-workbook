@@ -1,4 +1,10 @@
-# Data Summary: Milestone 2
+---
+title: "Data Summary: Milestone 2"
+format:
+  html:
+    embed-resources: true
+---
+
 
 Authors: Logan Rosell & Ian Walsh
 
