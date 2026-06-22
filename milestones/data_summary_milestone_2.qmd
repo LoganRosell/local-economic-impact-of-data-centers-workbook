@@ -1,4 +1,4 @@
-### Data Summary: Milestone 2
+# Data Summary: Milestone 2
 
 Authors: Logan Rosell & Ian Walsh
 
@@ -13,7 +13,8 @@ Finally, the County Business Patterns data presented two major obstacles: each y
 
 
 ## Data Organization
-<embed image of ERD here>
+![Figure 1: Entity Relationship Diagram, all current constraints are shown](capstone_db_erd.drawio.png)
+
 
 
 ## Data Compilation
