@@ -1,0 +1,17 @@
+### Data Summary: Milestone 2
+
+Authors: Logan Rosell & Ian Walsh
+
+## Overview
+
+
+
+## Data Ingestion
+
+
+
+## Data Organization
+
+
+
+## Data Compilation

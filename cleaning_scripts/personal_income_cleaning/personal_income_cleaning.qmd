@@ -22,7 +22,7 @@ load_dotenv()
 
 ```{python}
 data_dir = Path(os.environ["DATA_DIR"])
-csv_path = data_dir / "personal_income" /"CAINC1__ALL_AREAS_1969_2024.csv"
+csv_path = data_dir / "personal_income" / "personal_income_data.csv"
 ```
 
 ```{python}
@@ -71,17 +71,33 @@ df_final = df_final[df_final["GeoName"].str.contains(',', na = False)].reset_ind
 ### Only Keep Necessary Columns
 
 ```{python}
-df_final = df_final[['GeoFIPS', 'Per capita personal income (dollars) 2/', 'Personal income (thousands of dollars) ', 'Population (persons) 1/', 'year']]
+df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
+```
+
+
+Some of the state codes also have a trailing `*` that we'll want to remove
+
+```{python}
+df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
+```
+
+```{python}
+# Drop GeoName and empty column
+df_final = df_final.drop(columns = [
+    "GeoName",
+    np.nan,
+    "Population (persons) 1/",
+    "county",
+    "state_code"])
 ```
 
 ### Update column names
 
 ```{python}
 df_final = df_final.rename(columns={
-    "GeoFIPS": "county_id",
     "Per capita personal income (dollars) 2/": "per_capita_personal_income_dollars",
-    "Personal income (thousands of dollars) ": "personal_income_dollars_thousands",
-    "Population (persons) 1/": "population"
+    "Personal income (thousands of dollars)": "personal_income_thousands_of_dollars",
+    "GeoFIPS": "county_id"
 })
 ```
 
@@ -90,7 +106,7 @@ df_final = df_final.rename(columns={
 ```{python}
 df_final["year"] = df_final["year"].astype(int)
 
-value_columns = ["per_capita_personal_income_dollars", "personal_income_dollars_thousands", "population"]
+value_columns = ["per_capita_personal_income_dollars", "personal_income_thousands_of_dollars"]
 
 for col in value_columns:
     df_final[col] = pd.to_numeric(

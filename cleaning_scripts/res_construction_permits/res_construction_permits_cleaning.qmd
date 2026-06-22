@@ -1,0 +1,104 @@
+author: Logan Rosell
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+load_dotenv()
+```
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+csv_path = data_dir / "construction_permits" / "Residential_Construction_Permits_by_County_6297027898887955680.csv"
+```
+
+```{python}
+df_raw = pd.read_csv(
+    csv_path,
+    dtype = {"STATE": str, "COUNTY": str, "GEOID": str, "OBJECTID": str}
+)
+```
+
+```{python}
+# make sure all column names are lowercase
+def lower_cols(df):
+    df.columns = df.columns.str.lower()
+    return df
+df_raw = lower_cols(df_raw)
+```
+
+### Data Transformations
+- Concatonate state and county coulumns to create county_id
+    - Drop state and county cols 
+- Standardize the column naming format to help wide to long operation later
+- Convert from wide to long format by creating year column
+- Drop objectid, geoid, name, stusab, state_name, shape__area, shape__length
+
+```{python}
+df_raw = df_raw.rename(columns= {"multifamily_permits_3_4_unit_2022": "multifamily_permits_3_4_units_2022", "multifamily_permits_5_or_more_2022": "multifamily_permits_5_or_more_units_2022"})
+```
+
+```{python}
+# convert from wide to long format, creating year column in the process
+id_vars = [
+    'objectid', 'geoid', 'state', 'county', 'name', 'stusab', 
+    'state_name', 'shape__area', 'shape__length'
+]
+
+stubnames = [
+    'all_permits_', 
+    'single_family_permits_', 
+    'all_multifamily_permits_',
+    'multifamily_permits_2_units_', 
+    'multifamily_permits_3_4_units_',
+    'multifamily_permits_5_or_more_units_'
+]
+
+df_raw = pd.wide_to_long(
+    df_raw, 
+    stubnames=stubnames, 
+    i=id_vars, 
+    j='year', 
+    sep='',
+    suffix=r'\d\d\d\d'
+).reset_index()
+```
+
+```{python}
+# combind state and county fips codes to create county_id column
+df_raw["county_id"] = df_raw["state"] + df_raw["county"]
+df_raw = df_raw.drop(columns=["state", "county"])
+```
+
+```{python}
+# drop extra cols
+df_raw = df_raw.drop(columns=["shape__area", "shape__length", "objectid", "name", "stusab", "state_name", "geoid"])
+```
+
+```{python}
+# reorder columns to put county_id first
+df_final = df_raw[['county_id', 'year', 'all_permits_', 'single_family_permits_',
+       'all_multifamily_permits_', 'multifamily_permits_2_units_',
+       'multifamily_permits_3_4_units_',
+       'multifamily_permits_5_or_more_units_']]
+```
+
+```{python}
+# remove tailing "_" from column names
+df_final.columns = df_final.columns.str.rstrip('_')
+```
+
+```{python}
+# export cleaned data to sql table in local db
+df_final.to_sql(
+    "res_construction_permits",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```

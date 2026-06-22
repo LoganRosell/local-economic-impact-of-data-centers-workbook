@@ -1,0 +1,76 @@
+author: Logan Rosell
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from skimpy import skim
+from ydata_profiling import ProfileReport
+
+load_dotenv()
+```
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+csv_path = data_dir / "data_centers" / "im3_open_source_data_center_atlas" / "im3_open_source_data_center_atlas.csv"
+```
+
+```{python}
+df_raw = pd.read_csv(
+    csv_path,
+    dtype = {
+        "id":str,
+        "state_id": str,
+        "county_id": str})
+```
+
+### Data Transformations
+- concatonate state_id and county_id to form county_id_tmp column
+- Drop state, state_abb, state_id, county, county_id, ref columns
+- rename id to data_center_id
+- rename county_id_tmp to just county_id
+- remove leading or trailing spaces in all columns
+
+```{python}
+df_raw["county_id_tmp"] = df_raw["state_id"] + df_raw["county_id"]
+```
+
+
+```{python}
+df_final = df_raw.drop(columns=["state", "state_abb", "state_id", "county", "county_id", "ref"])
+```
+
+
+```{python}
+df_final = df_final.rename(columns={
+    "id": "data_center_id",
+    "county_id_tmp": "county_id"
+})
+```
+
+```{python}
+skim(df_final)
+```
+
+```{python}
+df_final.describe()
+```
+
+```{python}
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+
+```{python}
+df_final.to_sql(
+    "data_centers",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
