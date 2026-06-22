@@ -8,10 +8,6 @@ format:
 
 Authors: Logan Rosell & Ian Walsh
 
-## Overview
-
-
-
 ## Data Ingestion
 Our raw datasets required a number of preprocessing steps before they could be migrated to our database, the following describes a few of the general patterns of problems we encountered. First, the state and county FIPS codes were often separated and automatically dropped critical leading zeros when ingested via `pd.read_csv()`. We resolved this by explicitly importing these columns as strings to preserve the zeros, then concatenating the values to form a unique state-county identifier. Second, because our air and water quality data was at a daily granularity, we aggregated the metrics to an annual average to match our other datasets. To preserve the underlying daily variance of these environmental variables, we supplemented the annual averages by also computing the standard deviation for each measure.
 
@@ -22,5 +18,26 @@ Finally, the County Business Patterns data presented two major obstacles: each y
 ![Figure 1: Entity Relationship Diagram, all current constraints are shown](capstone_db_erd.drawio.png)
 
 
-
 ## Data Compilation
+### Data Centers and Personal Income
+![Figure 2: Scatter plot of data centers and per capita income by county, with average population from 2001-2022 as bubble size](scatterplot_income_datacenters.png)
+
+The above figure shows a scatter plot of data center count versus per capita personal income from the years 2001 to 2022 by county. Additionally, the size of each dot corresponds to the average county size across those same years. We have also included a vertical line to indicate mean income across all counties, for easy reference. The y-axis is log-transformed here to prevent grouping of points at the very bottom of the graph. 
+
+This graph pulls from 4 different tables:
+
+* Average population from the `county_population` table
+* Average per capita personal income from the `personal_income` table
+* Count of data centers from the `data_centers` table
+* List of all US county codes from the `us_counties` table
+
+### Key Response Variables Over Time
+![Figure 3: Line plot of cross-county average real GDP, unemployment rate, and PM25 concentration from 2001 to 2022](lineplot_gdp_unemployement_airquality.png)
+
+The above figure shows a line plot which plots some of our key response variables over time. For this analysis, we looked at unemployment rate, average air quality, and real GDP. We averaged across all counties in order to look at a more national scale, to identify any significant trends that we may notice in the data later. We can see from this graph that there are significant changes in these variables over time, which we will have to be mindfull of during our later analyses.
+
+This graph pulls from 3 different tables:
+
+* Real GDP from the `gdp` table
+* Unemployment Rate from the `unemployment` table
+* Average Air Quality (PM25) from the `air_quality` table
