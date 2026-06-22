@@ -1,0 +1,20 @@
+author: Logan Rosell
+
+
+```{python}
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# Create empty db tables and define relationship constraints
+
+
+```
