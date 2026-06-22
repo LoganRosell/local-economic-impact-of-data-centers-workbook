@@ -7,11 +7,13 @@ Authors: Logan Rosell & Ian Walsh
 
 
 ## Data Ingestion
+Our raw datasets required a number of preprocessing steps before they could be migrated to our database, the following describes a few of the general patterns of problems we encountered. First, the state and county FIPS codes were often separated and automatically dropped critical leading zeros when ingested via `pd.read_csv()`. We resolved this by explicitly importing these columns as strings to preserve the zeros, then concatenating the values to form a unique state-county identifier. Second, because our air and water quality data was at a daily granularity, we aggregated the metrics to an annual average to match our other datasets. To preserve the underlying daily variance of these environmental variables, we supplemented the annual averages by also computing the standard deviation for each measure.
 
+Finally, the County Business Patterns data presented two major obstacles: each year of data came in its own CSV file, and the column names changed multiple times over our analysis period. We overcame the file separation by wrapping our data transformations into modular functions and referencing them within a loop that stepped through each annual file. To handle the changing schemas without crashing our code, we used conditional logic to rename or drop specific columns only if they existed, alongside lookup functions to modify specific measurements based on the values of adjacent columns.
 
 
 ## Data Organization
-
+<embed image of ERD here>
 
 
 ## Data Compilation
