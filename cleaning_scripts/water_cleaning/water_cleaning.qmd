@@ -5,7 +5,7 @@ format: html
 
 # Water Cleaning Script
 
-## Import Raw Data
+## Import Raw Location and Parameter Data
 
 ```{python}
 import pandas as pd
@@ -25,5 +25,164 @@ water_dir = data_dir / "water"
 ```
 
 ```{python}
-csv_files = list(water_dir.global("*.csv"))
+values_path = water_dir / "all_water_values.csv"
+locations_path = water_dir / "all_monitoring_locations.csv"
+parameters_path = water_dir / "parameter_info.csv"
+```
+
+```{python}
+locations_df =  pd.read_csv(locations_path, dtype = str)
+parameters_df = pd.read_csv(parameters_path, dtype = str)
+```
+
+## Clean Data
+
+
+### Find Unique Values
+
+```{python}
+#max_chunks = 1
+unique_values = set()
+
+for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_size)):
+    #if i > max_chunks:
+        #break
+
+    merged = chunk.merge(
+        locations_df,
+        left_on = "monitoring_location_id",
+        right_on = "id",
+        how = "left",
+        copy = False
+    )
+
+    merged = merged.merge(
+        parameters_df,
+        left_on = "parameter_code",
+        right_on = "id",
+        how = "left",
+        copy = False
+    )
+
+    unique_values.update(merged['parameter_name'].dropna().unique())
+
+    print(f"chunk {i} done, moving onto next chunk")
+
+print(unique_values)
+```
+
+### Aggregate by Year + County
+
+```{python}
+output_path = water_dir / "final_data" /"water_data_aggregated.csv"
+processed_chunks_path = water_dir / "final_data" / "processed_chunks.csv"
+
+chunk_size = 200_000
+max_chunks = None
+
+values_to_use = ["Dissolved oxygen", "pH", "Temperature, water", "Turbidity, Nephelom", "Specific cond at 25C", "Phosphorus, wu", "Total nitrogen, wu", "Chlorophyll, in situ", "Suspended solids"]
+
+if processed_chunks_path.exists():
+    processed_df = pd.read_csv(processed_chunks_path, dtype=int)
+    processed_chunks = set(processed_df["chunk_index"])
+else:
+    processed_chunks = set()
+
+if not processed_chunks and output_path.exists():
+    output_path.unlink()
+
+header_written = False if not processed_chunks else True
+
+for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_size)):
+    if i in processed_chunks:
+        print(f"Chunk {i} already processed, skipping.")
+        continue
+
+    if max_chunks is not None and i >= max_chunks:
+        break
+
+    merged = chunk.merge(
+        locations_df,
+        left_on = "monitoring_location_id",
+        right_on = "id",
+        how = "left",
+        copy = False
+    )
+
+    merged = merged.merge(
+        parameters_df,
+        left_on = "parameter_code",
+        right_on = "id",
+        how = "left",
+        copy = False
+    )
+
+    combined_df = merged[merged["parameter_name"].isin(values_to_use)].copy()
+
+    combined_df = combined_df[["county_fips", "time", "parameter_name", "value", "unit_of_measure_x"]].reset_index(drop = True)
+
+    combined_df = combined_df.rename(columns={
+        "time": "date",
+        "unit_of_measure_x": "unit_of_measure",
+        "county_fips": "county_id",
+        "parameter_name": "parameter"
+    })
+
+    combined_df["date"] = pd.to_datetime(combined_df["date"], errors="coerce")
+    combined_df["value"] = pd.to_numeric(combined_df["value"], errors="coerce")
+
+    combined_df["parameter_unit"] = (
+        combined_df["parameter"].str.lower().str.replace(" ", "_", regex = False)
+        + "_units_in_"
+        + combined_df["unit_of_measure"].str.lower().str.replace(" ", "_", regex = False)
+    )
+
+    combined_df["year"] = combined_df["date"].dt.year
+
+    aggregated_df = combined_df.groupby(["county_id", "year", "parameter_unit"], as_index = False).agg(
+        sum_value=("value", "sum"),
+        count_value=("value", "count")
+    ).reset_index()
+
+    aggregated_df.to_csv(output_path, mode = "a", header = not header_written, index = False)
+    header_written = True
+
+    print(f"chunk {i} done and {len(aggregated_df):,} rows written")
+    
+    processed_chunks.add(i)
+    pd.DataFrame({"chunk_index": list(processed_chunks)}).to_csv(
+        processed_chunks_path, index=False
+        )
+```
+
+### Create Final DF
+
+```{python}
+aggregated_df = pd.read_csv(output_path)
+
+aggregated_df = aggregated_df.groupby(["county_id", "year", "parameter_unit"], as_index = False).sum()
+
+aggregated_df["mean_value"] = aggregated_df["sum_value"] / aggregated_df["count_value"]
+
+df_final = aggregated_df.pivot(
+        index = ["county_id", "year"],
+        columns = "parameter_unit",
+        values = "mean_value"
+    ).reset_index()
+```
+
+# Export to database
+
+```{python}
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+df_final.to_sql(
+    "water_quality",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
 ```
