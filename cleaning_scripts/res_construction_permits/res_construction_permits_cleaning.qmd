@@ -94,6 +94,11 @@ df_final.columns = df_final.columns.str.rstrip('_')
 ```
 
 ```{python}
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
     "res_construction_permits",
