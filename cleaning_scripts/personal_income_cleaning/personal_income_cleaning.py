@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 load_dotenv()
 
 data_dir = Path(os.environ["DATA_DIR"])
-csv_path = data_dir / "personal_income_data.csv"
+csv_path = data_dir / "personal_income" /"CAINC1__ALL_AREAS_1969_2024.csv"
 
 df_raw = pd.read_csv(csv_path, encoding='latin-1')
 
@@ -33,28 +33,18 @@ df_final["GeoFIPS"] = df_final["GeoFIPS"].str.replace('"','')
 # Only keep counties (have a comma)
 df_final = df_final[df_final["GeoName"].str.contains(',', na = False)].reset_index(drop=True)
 
-# Now split county and state into their own columns
-df_final[["county", "state_code"]] = df_final['GeoName'].str.split(', ', n=1, expand = True)
+df_final = df_final[['GeoFIPS', 'Per capita personal income (dollars) 2/', 'Personal income (thousands of dollars) ', 'Population (persons) 1/', 'year']]
 
-df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
-
-df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
-
-# Drop GeoName and empty column
-df_final = df_final.drop(columns = ["GeoName", np.nan])
-
-df_final.columns = df_final.columns.str.strip()
-
-# Then rename columns
 df_final = df_final.rename(columns={
-    "Per capita personal income (dollars) 2/": "Per Capita Personal Income (dollars)",
-    "Personal income (thousands of dollars)": "Personal Income (thousands of dollars)",
-    "Population (persons) 1/": "Population"
+    "GeoFIPS": "county_id",
+    "Per capita personal income (dollars) 2/": "per_capita_personal_income_dollars",
+    "Personal income (thousands of dollars) ": "personal_income_dollars_thousands",
+    "Population (persons) 1/": "population"
 })
 
 df_final["year"] = df_final["year"].astype(int)
 
-value_columns = ["Per Capita Personal Income (dollars)", "Personal Income (thousands of dollars)", "Population"]
+value_columns = ["per_capita_personal_income_dollars", "personal_income_dollars_thousands", "population"]
 
 for col in value_columns:
     df_final[col] = pd.to_numeric(

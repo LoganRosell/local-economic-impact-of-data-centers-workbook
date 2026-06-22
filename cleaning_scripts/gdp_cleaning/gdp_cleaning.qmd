@@ -67,44 +67,21 @@ df_final["GeoFIPS"] = df_final["GeoFIPS"].str.replace('"','')
 df_final = df_final[df_final["GeoName"].str.contains(',', na = False)].reset_index(drop=True)
 ```
 
-```{python}
-# Now split county and state into their own columns
-df_final[["county", "state_code"]] = df_final['GeoName'].str.split(', ', n=1, expand = True)
-```
+### Only Keep Necessary Columns
 
 ```{python}
-# Check
-df_check = df_final[df_final["county"].str.contains(',') | df_final["state_code"].str.contains(',')]
-```
-
-It looks like there are a bunch of "independent cities" in Virginia that are causing problems. They are lumped into the nearest county though for FIPS so we'll just remove them from the state_code column
-
-```{python}
-df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
-```
-
-
-Some of the state codes also have a trailing `*` that we'll want to remove
-
-```{python}
-df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
-```
-
-```{python}
-# Drop the GeoName column
-df_final = df_final.drop(columns = "GeoName")
+df_final = df_final[['GeoFIPS', 'Real GDP (thousands of chained 2017 dollars) ', 'Current-dollar GDP (thousands of current dollars) ', 'Chain-type quantity indexes for real GDP ', 'year']]
 ```
 
 ### Update column names
 
 ```{python}
-df_final.columns = df_final.columns.str.strip()
-
 # Then rename columns
 df_final = df_final.rename(columns={
-    "Chain-type quantity indexes for real GDP": "Quantity Indexes for real GDP",
-    "Current-dollar GDP (thousands of current dollars)": "Current-Dollar GDP (thousands of dollars)",
-    "Real GDP (thousands of chained 2017 dollars)": "Real GDP (thousands of 2017 dollars)"
+    "GeoFIPS": "county_id",
+    "Chain-type quantity indexes for real GDP ": "quantity_index_gdp",
+    "Current-dollar GDP (thousands of current dollars) ": "current_gdp_dollars_thousands",
+    "Real GDP (thousands of chained 2017 dollars) ": "real_gdp_2017_dollars_thousands"
 })
 ```
 
@@ -113,18 +90,18 @@ df_final = df_final.rename(columns={
 ```{python}
 df_final["year"] = df_final["year"].astype(int)
 
-df_final["Quantity Indexes for real GDP"] = pd.to_numeric(
-    df_final["Quantity Indexes for real GDP"], 
+df_final["quantity_index_gdp"] = pd.to_numeric(
+    df_final["quantity_index_gdp"], 
     errors='coerce'
 )
 
-df_final["Current-Dollar GDP (thousands of dollars)"] = pd.to_numeric(
-    df_final["Current-Dollar GDP (thousands of dollars)"], 
+df_final["current_gdp_dollars_thousands"] = pd.to_numeric(
+    df_final["current_gdp_dollars_thousands"], 
     errors='coerce'
 ).astype('Int64') 
 
-df_final["Real GDP (thousands of 2017 dollars)"] = pd.to_numeric(
-    df_final["Real GDP (thousands of 2017 dollars)"], 
+df_final["real_gdp_2017_dollars_thousands"] = pd.to_numeric(
+    df_final["real_gdp_2017_dollars_thousands"], 
     errors='coerce'
 ).astype('Int64')
 ```
@@ -139,7 +116,7 @@ df_final.describe()
 ### Example Plots
 
 ```{python}
-gdp_cols = ['Quantity Indexes for real GDP', 'Current-Dollar GDP (thousands of dollars)', 'Real GDP (thousands of 2017 dollars)']
+gdp_cols = ['quantity_index_gdp', 'current_gdp_dollars_thousands', 'real_gdp_2017_dollars_thousands']
 ```
 
 ```{python}
@@ -148,9 +125,9 @@ gdp_means_year = df_final.groupby('year')[gdp_cols].mean()
 
 #### Average County GDP Over Time (for Current-Dollar & Real GDP)
 ```{python}
-sns.lineplot(gdp_means_year, x='year', y='Current-Dollar GDP (thousands of dollars)', label='Current-Dollar GDP')
+sns.lineplot(gdp_means_year, x='year', y='current_gdp_dollars_thousands', label='Current-Dollar GDP')
 
-sns.lineplot(gdp_means_year, x='year', y='Real GDP (thousands of 2017 dollars)', label='Real GDP')
+sns.lineplot(gdp_means_year, x='year', y='real_gdp_2017_dollars_thousands', label='Real GDP')
 
 plt.legend()
 
@@ -168,7 +145,7 @@ plt.show()
 
 #### Average County GDP Over Time (for Quantity Index)
 ```{python}
-sns.lineplot(gdp_means_year, x='year', y='Quantity Indexes for real GDP')
+sns.lineplot(gdp_means_year, x='year', y='quantity_index_gdp')
 
 plt.title("Average County Quantity Index for GDP Over Time")
 plt.xlabel("Year")
@@ -188,7 +165,7 @@ engine = create_engine(database_url)
 
 ```{python}
 df_final.to_sql(
-    "county_gdp",
+    "gdp",
     con=engine,
     if_exists="replace",
     index=False

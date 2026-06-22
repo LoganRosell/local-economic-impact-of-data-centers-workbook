@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 load_dotenv()
 
 data_dir = Path(os.environ["DATA_DIR"])
-csv_path = data_dir / "gdp_data.csv"
+csv_path = data_dir / 'gdp' / "CAGDP1__ALL_AREAS_2001_2024.csv"
 
 df_raw = pd.read_csv(csv_path, encoding='latin-1')
 
@@ -32,48 +32,38 @@ df_final["GeoFIPS"] = df_final["GeoFIPS"].str.replace('"','')
 # Only keep counties (have a comma)
 df_final = df_final[df_final["GeoName"].str.contains(',', na = False)].reset_index(drop=True)
 
-# Now split county and state into their own columns
-df_final[["county", "state_code"]] = df_final['GeoName'].str.split(', ', n=1, expand = True)
-
-df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
-
-df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
-
-df_final = df_final.drop(columns = "GeoName")
-
-df_final.columns = df_final.columns.str.strip()
+df_final = df_final[['GeoFIPS', 'Real GDP (thousands of chained 2017 dollars) ', 'Current-dollar GDP (thousands of current dollars) ', 'Chain-type quantity indexes for real GDP ', 'year']]
 
 # Then rename columns
 df_final = df_final.rename(columns={
-    "Chain-type quantity indexes for real GDP": "Quantity Indexes for real GDP",
-    "Current-dollar GDP (thousands of current dollars)": "Current-Dollar GDP (thousands of dollars)",
-    "Real GDP (thousands of chained 2017 dollars)": "Real GDP (thousands of 2017 dollars)"
+    "GeoFIPS": "county_id",
+    "Chain-type quantity indexes for real GDP ": "quantity_index_gdp",
+    "Current-dollar GDP (thousands of current dollars) ": "current_gdp_dollars_thousands",
+    "Real GDP (thousands of chained 2017 dollars) ": "real_gdp_2017_dollars_thousands"
 })
 
 df_final["year"] = df_final["year"].astype(int)
 
-df_final["Quantity Indexes for real GDP"] = pd.to_numeric(
-    df_final["Quantity Indexes for real GDP"], 
+df_final["quantity_index_gdp"] = pd.to_numeric(
+    df_final["quantity_index_gdp"], 
     errors='coerce'
 )
 
-df_final["Current-Dollar GDP (thousands of dollars)"] = pd.to_numeric(
-    df_final["Current-Dollar GDP (thousands of dollars)"], 
+df_final["current_gdp_dollars_thousands"] = pd.to_numeric(
+    df_final["current_gdp_dollars_thousands"], 
     errors='coerce'
 ).astype('Int64') 
 
-df_final["Real GDP (thousands of 2017 dollars)"] = pd.to_numeric(
-    df_final["Real GDP (thousands of 2017 dollars)"], 
+df_final["real_gdp_2017_dollars_thousands"] = pd.to_numeric(
+    df_final["real_gdp_2017_dollars_thousands"], 
     errors='coerce'
 ).astype('Int64')
-
-load_dotenv()
 
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
 
 df_final.to_sql(
-    "county_gdp",
+    "gdp",
     con=engine,
     if_exists="replace",
     index=False
