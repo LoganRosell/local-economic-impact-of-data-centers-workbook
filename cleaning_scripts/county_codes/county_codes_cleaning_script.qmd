@@ -43,7 +43,7 @@ df_final = df_raw.rename(columns={
 ```
 
 ```{python}
-df_final["combined_state_county_code"] = df_final["state_fips_code"] + df_final["county_fips_code"]
+df_final["county_id"] = df_final["state_fips_code"] + df_final["county_fips_code"]
 ```
 
 
