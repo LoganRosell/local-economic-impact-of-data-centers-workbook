@@ -85,6 +85,11 @@ df_final = df_final.rename(columns={
 })
 ```
 
+```{python}
+# trim leading spaces in county_id
+df_final["county_id"] = df_final["county_id"].str.strip()
+```
+
 ### Update column types
 
 ```{python}
