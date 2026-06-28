@@ -71,14 +71,14 @@ df_final = df_final[df_final["GeoName"].str.contains(',', na = False)].reset_ind
 ### Only Keep Necessary Columns
 
 ```{python}
-df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
+#df_final["state_code"] = df_final['state_code'].str.split(', ').str[-1]
 ```
 
 
 Some of the state codes also have a trailing `*` that we'll want to remove
 
 ```{python}
-df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
+#df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
 ```
 
 ```{python}
@@ -86,9 +86,10 @@ df_final["state_code"] = df_final['state_code'].str.split('*').str[0]
 df_final = df_final.drop(columns = [
     "GeoName",
     np.nan,
-    "Population (persons) 1/",
-    "county",
-    "state_code"])
+    "Population (persons) 1/"
+    #,"county",
+    #"state_code"
+    ])
 ```
 
 ### Update column names
@@ -96,7 +97,7 @@ df_final = df_final.drop(columns = [
 ```{python}
 df_final = df_final.rename(columns={
     "Per capita personal income (dollars) 2/": "per_capita_personal_income_dollars",
-    "Personal income (thousands of dollars)": "personal_income_thousands_of_dollars",
+    "Personal income (thousands of dollars) ": "personal_income_thousands_of_dollars",
     "GeoFIPS": "county_id"
 })
 ```
@@ -113,6 +114,11 @@ for col in value_columns:
         df_final[col], 
         errors='coerce'
     ).astype('Int64') 
+```
+
+```{python}
+# remove leading space in county_id
+df_final["county_id"] = df_final["county_id"].str.strip()
 ```
 
 ## EDA
