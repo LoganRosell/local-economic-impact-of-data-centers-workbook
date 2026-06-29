@@ -88,6 +88,17 @@ df_final["unemployed"] = df_final["unemployed"].astype(int)
 df_final["year"] = df_final["year"].astype(int)
 ```
 
+### Drop years outside of analysis window
+```{python}
+# remove years outside of analysis window
+def trim_years(df):
+    df = df[df["year"] >= 2001]
+    df = df[df["year"] <= 2022]
+    return df
+
+df_final = trim_years(df_final)
+```
+
 ## EDA
 
 ### Summary Statistics

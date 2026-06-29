@@ -121,6 +121,16 @@ for col in value_columns:
 df_final["county_id"] = df_final["county_id"].str.strip()
 ```
 
+```{python}
+# remove years outside of analysis window
+def trim_years(df):
+    df = df[df["year"] >= 2001]
+    df = df[df["year"] <= 2022]
+    return df
+
+df_final = trim_years(df_final)
+```
+
 ## EDA
 
 ### Summary Statistics

@@ -111,6 +111,16 @@ df_final["real_gdp_2017_dollars_thousands"] = pd.to_numeric(
 ).astype('Int64')
 ```
 
+```{python}
+# remove years outside of analysis window
+def trim_years(df):
+    df = df[df["year"] >= 2001]
+    df = df[df["year"] <= 2022]
+    return df
+
+df_final = trim_years(df_final)
+```
+
 ## EDA
 
 ### Summary Statistics
