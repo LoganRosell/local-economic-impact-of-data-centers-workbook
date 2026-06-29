@@ -235,6 +235,12 @@ df_final = pd.concat(list_of_df, ignore_index=True)
 ```
 
 ```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
     "business_patterns",
