@@ -9,9 +9,13 @@ format: html
 
 ```{python}
 import pandas as pd
+import numpy as np
+import json
+import urllib.request
 from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -35,19 +39,161 @@ locations_df =  pd.read_csv(locations_path, dtype = str)
 parameters_df = pd.read_csv(parameters_path, dtype = str)
 ```
 
-## Clean Data
+```{python}
+chunk_size = 200_000
+```
+
+## Parameter Analysis
 
 
 ### Find Unique Values
 
 ```{python}
 #max_chunks = 1
-unique_values = set()
+values_output_path = water_dir / "unique_parameter_names.csv"
 
-for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_size)):
-    #if i > max_chunks:
-        #break
+if values_output_path.exists():
+    unique_values_df = pd.read_csv(values_output_path, dtype=str)
+    print(f"{values_output_path} already exists, skipping unique-parameter export.")
+else:
+    all_values = []
 
+    for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_size)):
+        #if i > max_chunks:
+            #break
+
+        merged = chunk.merge(
+            locations_df,
+            left_on = "monitoring_location_id",
+            right_on = "id",
+            how = "left",
+            copy = False
+        )
+
+        merged = merged.merge(
+            parameters_df,
+            left_on = "parameter_code",
+            right_on = "id",
+            how = "left",
+            copy = False
+        )
+
+        all_values.extend(merged['parameter_name'].dropna().unique())
+
+        print(f"chunk {i} done, moving onto next chunk")
+
+    unique_values_df = pd.DataFrame({
+        "parameter_name": sorted(pd.Series(all_values).dropna().unique())
+        })
+
+    unique_values_df.to_csv(values_output_path, index = False)
+```
+
+### Find Missingness for each unique parameter
+
+```{python}
+missingness_output_path = water_dir / "county_parameter_missingness.csv"
+
+if missingness_output_path.exists():
+    print(f"{missingness_output_path} already exists, skipping county-parameter summary.")
+else:
+    summary_rows = []
+
+    for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize=chunk_size)):
+        merged = chunk.merge(
+            locations_df,
+            left_on="monitoring_location_id",
+            right_on="id",
+            how="left",
+            copy=False
+        )
+
+        merged = merged.merge(
+            parameters_df,
+            left_on="parameter_code",
+            right_on="id",
+            how="left",
+            copy=False
+        )
+
+        merged["time"] = pd.to_datetime(merged["time"], errors="coerce")
+        merged["year"] = merged["time"].dt.year
+
+        temp = merged[["county_fips", "year", "parameter_name"]].dropna()
+        temp = temp.drop_duplicates(subset=["county_fips", "year", "parameter_name"])
+        temp["present"] = 1
+
+        summary_rows.append(temp)
+
+        print(f"chunk {i} done, moving onto next chunk")
+
+    parameter_present_df = pd.concat(summary_rows, ignore_index=True)
+
+    parameter_present_df = (
+        parameter_present_df
+        .groupby(["county_fips", "year", "parameter_name"], as_index=False)
+        .agg(present=("present", "max"))
+    )
+
+    county_years = parameter_present_df[["county_fips", "year"]].drop_duplicates()
+    total_count = len(county_years)
+
+    county_year_missingness = (
+        parameter_present_df
+        .groupby("parameter_name", as_index=False)
+        .agg(present_count=("present", "sum"))
+        .sort_values("present_count", ascending=False)
+    )
+
+    county_year_missingness["total_count"] = total_count
+    county_year_missingness["missing_count"] = (
+        county_year_missingness["total_count"] - county_year_missingness["present_count"]
+    )
+    county_year_missingness["missing_rate"] = (
+        county_year_missingness["missing_count"] / county_year_missingness["total_count"]
+    )
+
+    county_year_missingness = county_year_missingness.sort_values(
+        "missing_rate", ascending = True
+    )
+
+    county_year_missingness.to_csv(missingness_output_path, index=False)
+```
+
+### Split out each parameter into it's own csv for further analysis
+
+```{python}
+# Create Directories
+split_dir = water_dir / "parameter_splits"
+split_dir.mkdir(parents = True, exist_ok = True)
+
+temp_dir = split_dir / "_chunk_temp"
+temp_dir.mkdir(parents = True, exist_ok = True)
+
+processed_chunks_path = split_dir / "processed_chunks.csv"
+
+# Grab all unique parameters
+values_to_split = unique_values_df["parameter_name"].dropna().tolist()
+
+# If we've already processed some chunks, check which one's we've processed
+if processed_chunks_path.exists():
+    processed_df = pd.read_csv(processed_chunks_path, dtype = int)
+    processed_chunks = set(processed_df["chunk_index"])
+else:
+    processed_chunks = set()
+
+# Loop over each chunk to write to csv
+for i, chunk in enumerate(pd.read_csv(values_path, dtype = str, chunksize = chunk_size)):
+    # If we already processed a chunk don't do it again
+    if i in processed_chunks:
+        print(f"Chunk {i} already processed, skipping.")
+        continue
+
+    # Get rid of any temp files from a previous run, so we don't accidentally re-write any data
+    for old_temp in temp_dir.glob(f"chunk_{i}_*.csv"):
+        old_temp.unlink()
+
+    # Merge locations and parameters tables into the values chunk
     merged = chunk.merge(
         locations_df,
         left_on = "monitoring_location_id",
@@ -64,12 +210,297 @@ for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_
         copy = False
     )
 
-    unique_values.update(merged['parameter_name'].dropna().unique())
+    # make times datetime and create a year column for easier EDA
+    merged["time"] = pd.to_datetime(merged["time"], errors = "coerce")
+    merged["year"] = merged["time"].dt.year
 
-    print(f"chunk {i} done, moving onto next chunk")
+    # Make numeric columns numeric
+    for x in ["value", "longitude", "latitude"]:
+        merged[x] = pd.to_numeric(merged[x], errors = "coerce")
 
-print(unique_values)
+    chunk_temp_files = [] # We'll need this for creating temp files later
+
+    # Loop over our unique parameters
+    for param in values_to_split:
+        param_df = merged[merged["parameter_name"] == param].copy() # Create a new df for just this parameter
+
+        # If there are no instances of this parameter just skip it
+        if param_df.empty: 
+            continue
+
+        # We don't need the whole table, there's some metadata that's not super useful
+        param_df = param_df[[
+            "monitoring_location_id",
+            "monitoring_location_name",
+            "time",
+            "year",
+            "parameter_name",
+            "unit_of_measure_x",
+            "value",
+            "county_fips",
+            "parameter_group_code",
+            "parameter_description",
+            "medium",
+            "longitude",
+            "latitude"
+        ]]
+
+        # Drop any duplicates in case some snuck in
+        param_df = param_df.drop_duplicates(subset = [
+            "monitoring_location_id",
+            "time",
+            "parameter_name",
+            "unit_of_measure_x",
+            "value",
+            "longitude",
+            "latitude"
+        ])
+
+        # There are too many characters as-is to make a readable csv file
+        safe_name = (
+            param.lower()
+            .replace(' ', "_")
+            .replace(',', '')
+            .replace("/", "_")
+            )
+
+        # Save to a temp file and update chunk_temp_files to store which temp files have been saved already
+        temp_file = temp_dir / f"chunk_{i}_{safe_name}.csv"
+        param_df.to_csv(temp_file, index = False)
+        chunk_temp_files.append((safe_name, temp_file))
+
+    # Now append our temp files to the final files
+    for safe_name, temp_file in chunk_temp_files:
+        final_file = split_dir / f"{safe_name}.csv"
+        write_header = not final_file.exists()
+
+        temp_df = pd.read_csv(temp_file)
+        temp_df.to_csv(final_file, mode = "a", header = write_header, index = False)
+
+        temp_file.unlink()
+
+    # Update our processed chunks file and let user know how many chunks they've got through so far
+    processed_chunks.add(i)
+    pd.DataFrame({"chunk_index": sorted(processed_chunks)}).to_csv(processed_chunks_path, index = False)
+
+    print(f"chunk {i} done, split files updated")
 ```
+
+### Parameter-Level EDA
+
+```{python}
+# User-defined parameter list (safe names)
+parameter_list = ["pH"]
+
+for param in parameter_list:
+    # Create file path
+    file_path = split_dir / f"{param}.csv"
+
+    # If file path doesn't exist, parameter_list probably wasn't specified correctly
+    if not file_path.exists():
+        print(f"No file found for {param}, please double-check csv file name. Skipping.")
+        continue
+
+    # Create an obvious break for easier reading in terminal
+    df = pd.read_csv(file_path, dtype = str)
+    print("\n" + "=" * 40)
+    print(f"EDA for {param}")
+
+    # Convert columns to correct types
+    for col in ["value", "longitude", "latitude", "year"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+
+    # Do some basic statistics
+    print("\nBasic Statistical Summary:")
+    summary = {
+        "rows": len(df),
+        "non_null_values": df["value"].notna().sum(),
+        "missing_value_rate": df["value"].isna().mean(),
+        "min_value": df["value"].min(),
+        "max_value": df["value"].max(),
+        "median_value": df["value"].median(),
+        "mean_value": df["value"].mean(),
+        "unique_counties": df["county_fips"].nunique(),
+        "unique_years": df["year"].nunique(),
+        "min_year": df["year"].min(),
+        "max_year": df["year"].max(),
+        "unique_monitoring_locations": df["monitoring_location_id"].nunique()
+
+    }
+    pd.set_option("display.float_format", "{:,.2f}".format)
+    print(pd.Series(summary))
+    for x in ["unit_of_measure_x", "parameter_group_code", "parameter_description", "medium"]:
+        print(f"\n{x}(s): {df[x].dropna().unique()}")
+
+    # Histograms by year and value
+    for i in ["year", "value"]:
+        plt.figure(figsize = (8, 4))
+        if i == "value":
+            cap = df[i].quantile(0.999) # cuts off extreme outliers
+            plot_data = df[i].clip(upper=cap)
+            bins = 40
+        else:
+            plot_data = df[i]
+            bins = 22
+        sns.histplot(plot_data.dropna(), bins = bins, kde = False)
+        plt.title(f"{i} Distribution for {param}")
+        plt.xlabel(i)
+        plt.ylabel("Count")
+        plt.show()
+
+    # Geographical Missingness
+    ## County FIPS json by plotly
+    with urllib.request.urlopen(
+        "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+    ) as response:
+        counties_geojson = json.load(response)
+
+    ## Get unique years
+    years = sorted(df["year"].dropna().unique())
+
+    frames = []
+
+    ## make one frame per year for time analysis
+    for year in years:
+        df_year = df[df["year"] == year].copy()
+
+        county_overlay = (
+            df_year[["county_fips"]]
+            .dropna()
+            .drop_duplicates()
+            .assign(has_data = 1)
+        )
+
+        choropleth = go.Choroplethmap(
+            geojson=counties_geojson,
+            locations=county_overlay["county_fips"],
+            z=county_overlay["has_data"],
+            featureidkey="id",
+            colorscale=[[0, "#fff9f9"], [1, "#338eca"]],
+            zmin=0,
+            zmax=1,
+            marker_opacity=0.35,
+            marker_line_width=0.3,
+            showscale=False,
+            hovertemplate="County FIPS: %{location}<br>Has data: Yes<extra></extra>"
+        )
+
+        points = (
+            df_year
+            .dropna(subset = ["latitude", "longitude"])
+            .drop_duplicates(subset = ["latitude", "longitude"])
+            .copy()
+        )
+
+        scatter = go.Scattermap(
+            lat = points["latitude"],
+            lon = points["longitude"],
+            mode="markers",
+            marker=dict(
+                size=5,
+                color="red",
+                opacity=0.55
+            ),
+            text=points["monitoring_location_name"] if "monitoring_location_name" in points.columns else None,
+            customdata=points[["county_fips", "value"]] if {"county_fips", "value"}.issubset(points.columns) else None,
+            hovertemplate=(
+                "Site: %{text}<br>"
+                "County FIPS: %{customdata[0]}<br>"
+                "Value: %{customdata[1]}<br>"
+                "Lat: %{lat}<br>"
+                "Lon: %{lon}<extra></extra>"
+            ) if {"county_fips", "value"}.issubset(points.columns) else None,
+            showlegend=False
+        )
+
+        frames.append(
+            go.Frame(
+                data=[choropleth, scatter],
+                name=str(int(year))
+            )
+        )
+
+    if not frames:
+        print(f"No valid yearly data found for {param}")
+        continue
+
+    fig = go.Figure(
+        data = frames[0].data,
+        frames = frames
+    )
+        
+    fig.update_layout(
+        title=f"{param}: county coverage + monitoring points by year",
+        map=dict(
+            style="carto-positron",
+            center=dict(lat=37.8, lon=-96),
+            zoom=3
+        ),
+        margin=dict(l=0, r=0, t=50, b=0),
+        updatemenus=[
+            dict(
+                type="buttons",
+                showactive=False,
+                x=0.05,
+                y=0.95,
+                buttons=[
+                    dict(
+                        label="Play",
+                        method="animate",
+                        args=[
+                            None,
+                            {
+                                "frame": {"duration": 700, "redraw": True},
+                                "transition": {"duration": 300},
+                                "fromcurrent": True
+                            }
+                        ]
+                    ),
+                    dict(
+                        label="Pause",
+                        method="animate",
+                        args=[
+                            [None],
+                            {
+                                "frame": {"duration": 0, "redraw": False},
+                                "transition": {"duration": 0},
+                                "mode": "immediate"
+                            }
+                        ]
+                    )
+                ]
+            )
+        ],
+        sliders=[
+            dict(
+                active=0,
+                currentvalue={"prefix": "Year: "},
+                pad={"t": 30},
+                steps=[
+                    dict(
+                        label=str(int(y)),
+                        method="animate",
+                        args=[
+                            [str(int(y))],
+                            {
+                                "frame": {"duration": 0, "redraw": True},
+                                "transition": {"duration": 0},
+                                "mode": "immediate"
+                            }
+                        ]
+                    )
+                    for y in years
+                ]
+            )
+        ]
+    )
+
+    fig.show()
+```
+
+## Clean Data
 
 ### Aggregate by Year + County
 
@@ -77,7 +508,6 @@ print(unique_values)
 output_path = water_dir / "final_data" /"water_data_aggregated.csv"
 processed_chunks_path = water_dir / "final_data" / "processed_chunks.csv"
 
-chunk_size = 200_000
 max_chunks = None
 
 values_to_use = ["Dissolved oxygen", "pH", "Temperature, water", "Turbidity, Nephelom", "Specific cond at 25C", "Phosphorus, wu", "Total nitrogen, wu", "Chlorophyll, in situ", "Suspended solids"]
