@@ -17,6 +17,7 @@ load_dotenv()
 ```{python}
 data_dir = Path(os.environ["DATA_DIR"])
 csv_path = data_dir / "county_fips_codes" / "county_2020_fips_codes.csv"
+centroids_path = data_dir / "county_fips_codes" / "US_Counties_Centroids.csv"
 ```
 
 
@@ -29,6 +30,29 @@ df_raw = pd.read_csv(
 )
 ```
 
+```{python}
+centroids_df = pd.read_csv(
+    centroids_path,
+    dtype={"FIPS_CD": str}
+)
+```
+
+```{python}
+centroids_df = centroids_df.rename(columns = {
+    "FIPS_CD": "combined_state_county_code",
+    "LONGITUDE": "county_longitude",
+    "LATITUDE": "county_latitude"
+})
+
+centroids_df["combined_state_county_code"] = (centroids_df["combined_state_county_code"]).str.zfill(5)
+
+centroids_df["county_centroid_longitude"] = pd.to_numeric(
+    centroids_df["county_longitude"], errors="coerce"
+)
+centroids_df["county_centroid_latitude"] = pd.to_numeric(
+    centroids_df["county_latitude"], errors="coerce"
+)
+```
 
 ```{python}
 df_final = df_raw.rename(columns={
@@ -46,11 +70,23 @@ df_final = df_raw.rename(columns={
 df_final["combined_state_county_code"] = df_final["state_fips_code"] + df_final["county_fips_code"]
 ```
 
-
 ```{python}
-df_final.describe()
+df_final = df_final.merge(
+    centroids_df[["combined_state_county_code", "county_centroid_longitude", "county_centroid_latitude"]],
+    on="combined_state_county_code",
+    how="left"
+)
 ```
 
+```{python}
+df_final.describe(include=[object])
+```
+
+```{python}
+centroid_missing = df_final[df_final[["county_centroid_longitude", "county_centroid_latitude"]].isna().any(axis = 1)]
+centroid_missing
+# Looks like these are all non-mainland counties so we should be good
+```
 
 ```{python}
 database_url = os.getenv("DATABASE_URL")
