@@ -164,6 +164,62 @@ WHERE county_id IN (
 );
 
 
+-- For each county which is not present in all tables, show which specific tables it is missing from
+WITH county_presence AS (
+    SELECT 
+        c.county_id,
+        c.county_name,
+        c.state,
+        c.functional_status,
+        c.fips_class_code,
+        -- Check presence in each table (1 if exists, 0 if missing)
+        CASE WHEN aq.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_air_quality,
+        CASE WHEN bp.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_business_patterns,
+        CASE WHEN p.county_id  IS NOT NULL THEN 1 ELSE 0 END AS in_population,
+        CASE WHEN g.county_id  IS NOT NULL THEN 1 ELSE 0 END AS in_gdp,
+        CASE WHEN pi.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_personal_income,
+        CASE WHEN rcp.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_res_construction_permits,
+        CASE WHEN u.county_id  IS NOT NULL THEN 1 ELSE 0 END AS in_unemployment
+    FROM us_counties c
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM air_quality) aq 
+        ON CAST(c.county_id AS varchar) = aq.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM business_patterns) bp 
+        ON CAST(c.county_id AS varchar) = bp.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM population) p 
+        ON CAST(c.county_id AS varchar) = p.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM gdp) g 
+        ON CAST(c.county_id AS varchar) = g.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM personal_income) pi 
+        ON CAST(c.county_id AS varchar) = pi.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM res_construction_permits) rcp 
+        ON CAST(c.county_id AS varchar) = rcp.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM unemployment) u 
+        ON CAST(c.county_id AS varchar) = u.county_id
+),
+scored_presence AS (
+    SELECT 
+        *,
+        -- Sum the individual flags to get the total row score
+        (in_air_quality + 
+         in_business_patterns + 
+         in_population + 
+         in_gdp + 
+         in_personal_income + 
+         in_res_construction_permits + 
+         in_unemployment) AS total_tables_present
+    FROM county_presence
+)
+SELECT *
+FROM scored_presence
+WHERE total_tables_present < 7
+ORDER BY total_tables_present ASC, state, county_name;
+
+
+
+
+
+
+
 -- ================================================
 -- Check range of years covered by each table
 
