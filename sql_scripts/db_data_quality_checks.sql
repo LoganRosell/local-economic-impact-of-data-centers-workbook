@@ -103,36 +103,43 @@ SELECT
     (SELECT COUNT(DISTINCT county_id) FROM unemployment) AS unemployment_counties;
 
 -- return only counties found in all tables except for the data_centers table
-SELECT DISTINCT CAST(county_id AS varchar)
+SELECT DISTINCT 
+    county_id,
+    county_name,
+    state,
+    functional_status,
+    fips_class_code
 FROM us_counties
-INTERSECT 
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM air_quality
-INTERSECT 
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM business_patterns
-INTERSECT 
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM population
-INTERSECT 
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM gdp
-INTERSECT
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM personal_income
-INTERSECT
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM res_construction_permits
-INTERSECT
-SELECT DISTINCT CAST(county_id AS varchar)
-FROM unemployment;
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    INTERSECT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+      INTERSECT 
+      SELECT DISTINCT CAST(county_id AS varchar) FROM air_quality
+      INTERSECT 
+      SELECT DISTINCT CAST(county_id AS varchar) FROM business_patterns
+      INTERSECT 
+      SELECT DISTINCT CAST(county_id AS varchar) FROM population
+      INTERSECT 
+      SELECT DISTINCT CAST(county_id AS varchar) FROM gdp
+      INTERSECT
+      SELECT DISTINCT CAST(county_id AS varchar) FROM personal_income
+      INTERSECT
+      SELECT DISTINCT CAST(county_id AS varchar) FROM res_construction_permits
+      INTERSECT
+      SELECT DISTINCT CAST(county_id AS varchar) FROM unemployment
+    )
+);
 
 
 -- return counties which do not appear in all datasets
 SELECT DISTINCT 
     county_id,
     county_name,
-    state
+    state,
+    functional_status,
+    fips_class_code
 FROM us_counties
 WHERE county_id IN (
     SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
