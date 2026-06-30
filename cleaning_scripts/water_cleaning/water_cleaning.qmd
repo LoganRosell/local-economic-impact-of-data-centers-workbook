@@ -35,6 +35,10 @@ locations_df =  pd.read_csv(locations_path, dtype = str)
 parameters_df = pd.read_csv(parameters_path, dtype = str)
 ```
 
+```{python}
+chunk_size = 200_000
+```
+
 ## Clean Data
 
 
@@ -42,34 +46,117 @@ parameters_df = pd.read_csv(parameters_path, dtype = str)
 
 ```{python}
 #max_chunks = 1
-unique_values = set()
+values_output_path = water_dir / "unique_parameter_names.csv"
 
-for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_size)):
-    #if i > max_chunks:
-        #break
+if values_output_path.exists():
+    unique_values_df = pd.read_csv(values_output_path, dtype=str)
+    print(f"{values_output_path} already exists, skipping unique-parameter export.")
+else:
+    all_values = []
 
-    merged = chunk.merge(
-        locations_df,
-        left_on = "monitoring_location_id",
-        right_on = "id",
-        how = "left",
-        copy = False
-    )
+    for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize = chunk_size)):
+        #if i > max_chunks:
+            #break
 
-    merged = merged.merge(
-        parameters_df,
-        left_on = "parameter_code",
-        right_on = "id",
-        how = "left",
-        copy = False
-    )
+        merged = chunk.merge(
+            locations_df,
+            left_on = "monitoring_location_id",
+            right_on = "id",
+            how = "left",
+            copy = False
+        )
 
-    unique_values.update(merged['parameter_name'].dropna().unique())
+        merged = merged.merge(
+            parameters_df,
+            left_on = "parameter_code",
+            right_on = "id",
+            how = "left",
+            copy = False
+        )
 
-    print(f"chunk {i} done, moving onto next chunk")
+        all_values.extend(merged['parameter_name'].dropna().unique())
 
-print(unique_values)
+        print(f"chunk {i} done, moving onto next chunk")
+
+    unique_values_df = pd.DataFrame({
+        "parameter_name": sorted(pd.Series(all_values).dropna().unique())
+        })
+
+    unique_values_df.to_csv(values_output_path, index = False)
 ```
+
+### Find Missingness for each unique value
+
+```{python}
+missingness_output_path = water_dir / "county_parameter_missingness.csv"
+
+if missingness_output_path.exists():
+    print(f"{missingness_output_path} already exists, skipping county-parameter summary.")
+else:
+    summary_rows = []
+
+    for i, chunk in enumerate(pd.read_csv(values_path, dtype=str, chunksize=chunk_size)):
+        merged = chunk.merge(
+            locations_df,
+            left_on="monitoring_location_id",
+            right_on="id",
+            how="left",
+            copy=False
+        )
+
+        merged = merged.merge(
+            parameters_df,
+            left_on="parameter_code",
+            right_on="id",
+            how="left",
+            copy=False
+        )
+
+        merged["time"] = pd.to_datetime(merged["time"], errors="coerce")
+        merged["year"] = merged["time"].dt.year
+
+        temp = merged[["county_fips", "year", "parameter_name"]].dropna()
+        temp = temp.drop_duplicates(subset=["county_fips", "year", "parameter_name"])
+        temp["present"] = 1
+
+        summary_rows.append(temp)
+
+        print(f"chunk {i} done, moving onto next chunk")
+
+    parameter_present_df = pd.concat(summary_rows, ignore_index=True)
+
+    parameter_present_df = (
+        parameter_present_df
+        .groupby(["county_fips", "year", "parameter_name"], as_index=False)
+        .agg(present=("present", "max"))
+    )
+
+    county_years = parameter_present_df[["county_fips", "year"]].drop_duplicates()
+    total_count = len(county_years)
+
+    county_year_missingness = (
+        parameter_present_df
+        .groupby("parameter_name", as_index=False)
+        .agg(present_count=("present", "sum"))
+        .sort_values("present_count", ascending=False)
+    )
+
+    county_year_missingness["total_count"] = total_count
+    county_year_missingness["missing_count"] = (
+        county_year_missingness["total_count"] - county_year_missingness["present_count"]
+    )
+    county_year_missingness["missing_rate"] = (
+        county_year_missingness["missing_count"] / county_year_missingness["total_count"]
+    )
+
+    county_year_missingness = county_year_missingness.sort_values(
+        "missing_rate", ascending = True
+    )
+
+    county_year_missingness.to_csv(missingness_output_path, index=False)
+```
+
+We will use the above file to determine the values to use
 
 ### Aggregate by Year + County
 
@@ -77,7 +164,6 @@ print(unique_values)
 output_path = water_dir / "final_data" /"water_data_aggregated.csv"
 processed_chunks_path = water_dir / "final_data" / "processed_chunks.csv"
 
-chunk_size = 200_000
 max_chunks = None
 
 values_to_use = ["Dissolved oxygen", "pH", "Temperature, water", "Turbidity, Nephelom", "Specific cond at 25C", "Phosphorus, wu", "Total nitrogen, wu", "Chlorophyll, in situ", "Suspended solids"]
