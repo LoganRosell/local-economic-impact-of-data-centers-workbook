@@ -290,7 +290,7 @@ for i, chunk in enumerate(pd.read_csv(values_path, dtype = str, chunksize = chun
 
 ```{python}
 # User-defined parameter list (safe names)
-parameter_list = []
+parameter_list = ["pH"]
 
 for param in parameter_list:
     # Create file path
@@ -325,19 +325,26 @@ for param in parameter_list:
         "unique_counties": df["county_fips"].nunique(),
         "unique_years": df["year"].nunique(),
         "min_year": df["year"].min(),
-        "max_year": df["year"].max()
+        "max_year": df["year"].max(),
+        "unique_monitoring_locations": df["monitoring_location_id"].nunique()
+
     }
+    pd.set_option("display.float_format", "{:,.2f}".format)
     print(pd.Series(summary))
+    for x in ["unit_of_measure_x", "parameter_group_code", "parameter_description", "medium"]:
+        print(f"\n{x}(s): {df[x].dropna().unique()}")
 
     # Histograms by year and value
     for i in ["year", "value"]:
         plt.figure(figsize = (8, 4))
-        if i == "year":
-            n_unique = df[i].dropna().nunique()
-            bins = max(1, int(n_unique))
+        if i == "value":
+            cap = df[i].quantile(0.999) # cuts off extreme outliers
+            plot_data = df[i].clip(upper=cap)
+            bins = 40
         else:
-            bins = 30
-        sns.histplot(df[i].dropna(), bins = bins, kde = True)
+            plot_data = df[i]
+            bins = 22
+        sns.histplot(plot_data.dropna(), bins = bins, kde = False)
         plt.title(f"{i} Distribution for {param}")
         plt.xlabel(i)
         plt.ylabel("Count")
@@ -366,7 +373,7 @@ for param in parameter_list:
             .assign(has_data = 1)
         )
 
-        choropleth = go.Choroplethmapbox(
+        choropleth = go.Choroplethmap(
             geojson=counties_geojson,
             locations=county_overlay["county_fips"],
             z=county_overlay["has_data"],
@@ -387,7 +394,7 @@ for param in parameter_list:
             .copy()
         )
 
-        scatter = go.Scattermapbox(
+        scatter = go.Scattermap(
             lat = points["latitude"],
             lon = points["longitude"],
             mode="markers",
@@ -426,7 +433,7 @@ for param in parameter_list:
         
     fig.update_layout(
         title=f"{param}: county coverage + monitoring points by year",
-        mapbox=dict(
+        map=dict(
             style="carto-positron",
             center=dict(lat=37.8, lon=-96),
             zoom=3
