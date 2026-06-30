@@ -58,6 +58,16 @@ df_raw['population'] = df_raw['other_info'].astype(str).str[-8:].astype(int)
 df_final = df_raw.groupby(['year', 'county_id'], as_index = False)['population'].sum()
 ```
 
+```{python}
+# remove years outside of analysis window
+def trim_years(df):
+    df = df[df["year"] >= 2001]
+    df = df[df["year"] <= 2022]
+    return df
+
+df_final = trim_years(df_final)
+```
+
 ## EDA
 
 ### Summary Statistics
@@ -89,7 +99,7 @@ engine = create_engine(database_url)
 
 ```{python}
 df_final.to_sql(
-    "county_population",
+    "population",
     con=engine,
     if_exists="replace",
     index=False

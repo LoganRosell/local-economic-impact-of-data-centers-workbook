@@ -94,6 +94,16 @@ df_final.columns = df_final.columns.str.rstrip('_')
 ```
 
 ```{python}
+# remove years outside of analysis window
+def trim_years(df):
+    df = df[df["year"] >= 2001]
+    df = df[df["year"] <= 2022]
+    return df
+
+df_final = trim_years(df_final)
+```
+
+```{python}
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
 ```

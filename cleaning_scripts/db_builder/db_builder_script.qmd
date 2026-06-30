@@ -2,19 +2,45 @@ author: Logan Rosell
 
 
 ```{python}
-import pandas as pd
-import numpy as np
 from pathlib import Path
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+import subprocess
+import sys
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
 ```
 
 ```{python}
-# Create empty db tables and define relationship constraints
+def try_to_run_file(file_path):
+    try:
+        result = subprocess.run(
+            ["quarto", "render", str(file_path), "--to", "markdown", "--output", "-"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        print(f"Successfully ran pipeline: {file_path}")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Pipeline failed!\nError output:\n{e.stderr}", file=sys.stderr)
+```
 
+```{python}
+# run all Python cleaning scripts 
+cleaning_scripts_path = data_dir.parent / "cleaning_scripts"
+
+try_to_run_file(cleaning_scripts_path / "air_quality/air_quality_cleaning_script.qmd")
+try_to_run_file(cleaning_scripts_path / "business_patterns/business_patterns_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "county_codes/county_codes_cleaning_script.qmd")
+try_to_run_file(cleaning_scripts_path / "data_centers/data_centers_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "gdp_cleaning/gdp_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "personal_income_cleaning/personal_income_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "population_cleaning/population_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "res_construction_permits/res_construction_permits_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "unemployment_cleaning/unemployment_cleaning.qmd")
 
 ```

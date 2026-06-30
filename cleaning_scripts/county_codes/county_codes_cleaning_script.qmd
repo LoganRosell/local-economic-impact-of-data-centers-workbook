@@ -52,6 +52,36 @@ centroids_df["county_centroid_longitude"] = pd.to_numeric(
 centroids_df["county_centroid_latitude"] = pd.to_numeric(
     centroids_df["county_latitude"], errors="coerce"
 )
+### FUNCSTAT Column data definition
+A:  Identifies an active government providing primary general-purpose functions.
+B:  Identifies an active government that is partially consolidated with another government but with separate officials providing primary general-purpose functions.
+C:  Identifies an active government consolidated with another government with a single set of officials.
+F:  Identifies a fictitious entity created to fill the Census Bureau's geographic hierarchy.
+G:  Identifies an active government that is subordinate to another unit of government.
+N:  Identifies a nonfunctioning legal entity.
+S:  Identifies a statistical entity
+
+```{python}
+# Remove S rows since they statitical areas which overlap with counties
+df_raw = df_raw[df_raw["FUNCSTAT"]!="S"]
+```
+
+### CLASSFP Column data definition
+H1:  Identifies an active county or statistically equivalent entity that does not qualify under subclass C7 or H6.
+H4:  Identifies a legally defined inactive or nonfunctioning county or statistically equivalent entity that does not qualify under subclass H6.
+H5:  Identifies census areas in Alaska, a statistical county equivalent entity.
+H6:  Identifies a county or statistically equivalent entity that is coextensive in area or governmentally consolidated with an incorporated place, part of an incorporated place, or a consolidated city.
+C7:  Identifies an incorporated place that is an independent of any county.
+
+```{python}
+# Remove C7 observations, they are completely separate from counties
+df_raw = df_raw[df_raw["CLASSFP"]!="C7"]
+```
+
+```{python}
+# Remove US territories
+df_raw = df_raw[~df_raw["STATE"].isin(['AS', 'GU', 'MP', 'PR', 'UM', 'VI'])]
+
 ```
 
 ```{python}
@@ -67,7 +97,7 @@ df_final = df_raw.rename(columns={
 ```
 
 ```{python}
-df_final["combined_state_county_code"] = df_final["state_fips_code"] + df_final["county_fips_code"]
+df_final["county_id"] = df_final["state_fips_code"] + df_final["county_fips_code"]
 ```
 
 ```{python}
