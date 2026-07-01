@@ -1,4 +1,3 @@
-
 ```{python}
 import pandas as pd
 import numpy as np
@@ -11,6 +10,11 @@ import sys
 from skimpy import skim
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+# For geo plots
+import json
+import urllib.request
+import plotly.graph_objects as go
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -49,22 +53,302 @@ print(df.describe().round(2))
 ### Statitical Distribution Plots
 
 ```{python}
-
 # Hisogram
-sns.histplot(data=df, x=cols[2])
-plt.show()
+for i in [1, 2, 3, 4]:
+    if i == 4:
+        log = False
+    else:
+        log = True
+    sns.histplot(data=df, x=cols[i], log_scale = log, kde = True)
+    plt.show()
 ```
 
 ### Checking Intra-Data-Source Correlation
 
 ```{python}
-sns.pairplot(df, corner=True)
+sns.pairplot(df, corner=True, kind = "reg", diag_kind = "kde")
 plt.show()
 ```
 
 
 ### Geographic Distribution
 
+#### Missingness Check
 ```{python}
+# Update these:
+eda_table_name = "Unemployment"
 
+# Basic template, needs no changes
+with urllib.request.urlopen(
+        "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+    ) as response:
+        counties_geojson = json.load(response)
+
+map_df = df[["year", "county_id"]].dropna().copy()
+
+## Get unique years
+years = sorted(map_df["year"].dropna().unique())
+
+frames = []
+
+## make one frame per year for time analysis
+for year in years:
+    df_year = map_df[map_df["year"] == year].copy()
+
+    ## Create df that just checks whether that county has any data
+    county_overlay = (
+        df_year[["county_id"]]
+        .drop_duplicates()
+        .assign(has_data = 1)
+    )
+
+    ## Create the choropleth overlay
+    choropleth = go.Choroplethmap(
+        geojson=counties_geojson,
+        locations=county_overlay["county_id"],
+        z=county_overlay["has_data"],
+        featureidkey="id",
+        colorscale=[[0, "#fff9f9"], [1, "#2cb94f"]],
+        zmin=0,
+        zmax=1,
+        marker_opacity=0.35,
+        marker_line_width=0.3,
+        showscale=False,
+        hovertemplate="County FIPS: %{location}<br>Has data: Yes<extra></extra>"
+    )
+
+    ## Append this year to the frame
+    frames.append(
+        go.Frame(
+            data=[choropleth],
+            name=str(int(year))
+        )
+    )
+
+## Error if there are no years for some reasdon
+if not frames:
+    raise ValueError(f"No valid yearly data found for {eda_table_name}")
+
+fig = go.Figure(
+    data = frames[0].data,
+    frames = frames
+)
+    
+## Make it look nice
+fig.update_layout(
+    title=f"{eda_table_name}: county coverage by year",
+    map=dict(
+        style="carto-positron",
+        center=dict(lat=37.8, lon=-96),
+        zoom=3
+    ),
+    margin=dict(l=0, r=0, t=50, b=0),
+    updatemenus=[
+        dict(
+            type="buttons",
+            showactive=False,
+            x=0.05,
+            y=0.95,
+            buttons=[
+                dict(
+                    label="Play",
+                    method="animate",
+                    args=[
+                        None,
+                        {
+                            "frame": {"duration": 700, "redraw": True},
+                            "transition": {"duration": 300},
+                            "fromcurrent": True
+                        }
+                    ]
+                ),
+                dict(
+                    label="Pause",
+                    method="animate",
+                    args=[
+                        [None],
+                        {
+                            "frame": {"duration": 0, "redraw": False},
+                            "transition": {"duration": 0},
+                            "mode": "immediate"
+                        }
+                    ]
+                )
+            ]
+        )
+    ],
+    sliders=[
+        dict(
+            active=0,
+            currentvalue={"prefix": "Year: "},
+            pad={"t": 30},
+            steps=[
+                dict(
+                    label=str(int(y)),
+                    method="animate",
+                    args=[
+                        [str(int(y))],
+                        {
+                            "frame": {"duration": 0, "redraw": True},
+                            "transition": {"duration": 0},
+                            "mode": "immediate"
+                        }
+                    ]
+                )
+                for y in years
+            ]
+        )
+    ]
+)
+
+fig.show()
 ```
+
+#### Values by County
+
+```{python}
+# Update these:
+eda_table_name = "Unemployment"
+cols_to_use = [1,2,3,4]
+
+# Basic template, needs no changes
+with urllib.request.urlopen(
+        "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+    ) as response:
+        counties_geojson = json.load(response)
+
+## one map per column
+for i in cols_to_use:
+    value_col = cols[i]
+    map_df = df[["year", "county_id", value_col]].dropna().copy()
+
+    ## Get unique years
+    years = sorted(map_df["year"].dropna().unique())
+
+    frames = []
+
+    value_min = map_df[value_col].min()
+    value_max = map_df[value_col].max()
+
+    ## make one frame per year for time analysis
+    for year in years:
+        df_year = map_df[map_df["year"] == year].copy()
+
+        ## Create the choropleth overlay
+        choropleth = go.Choroplethmap(
+            geojson=counties_geojson,
+            locations=df_year["county_id"],
+            z=df_year[value_col],
+            featureidkey="id",
+            colorscale="Viridis",
+            zmin=value_min,
+            zmax=value_max,
+            marker_opacity=0.5,
+            marker_line_width=0.3,
+            colorbar=dict(title=value_col),
+            hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
+        )
+
+        ## Append this year to the frame
+        frames.append(
+            go.Frame(
+                data=[choropleth],
+                name=str(int(year))
+            )
+        )
+
+    ## Error if there are no years for some reasdon
+    if not frames:
+        raise ValueError(f"No valid yearly data found for {value_col}")
+
+    fig = go.Figure(
+        data = frames[0].data,
+        frames = frames
+    )
+        
+    ## Make it look nice
+    fig.update_layout(
+        title=f"{eda_table_name}: {value_col} by county and year",
+        map=dict(
+            style="carto-positron",
+            center=dict(lat=37.8, lon=-96),
+            zoom=3
+        ),
+        margin=dict(l=0, r=0, t=50, b=0),
+        updatemenus=[
+            dict(
+                type="buttons",
+                showactive=False,
+                x=0.05,
+                y=0.95,
+                buttons=[
+                    dict(
+                        label="Play",
+                        method="animate",
+                        args=[
+                            None,
+                            {
+                                "frame": {"duration": 700, "redraw": True},
+                                "transition": {"duration": 300},
+                                "fromcurrent": True
+                            }
+                        ]
+                    ),
+                    dict(
+                        label="Pause",
+                        method="animate",
+                        args=[
+                            [None],
+                            {
+                                "frame": {"duration": 0, "redraw": False},
+                                "transition": {"duration": 0},
+                                "mode": "immediate"
+                            }
+                        ]
+                    )
+                ]
+            )
+        ],
+        sliders=[
+            dict(
+                active=0,
+                currentvalue={"prefix": "Year: "},
+                pad={"t": 30},
+                steps=[
+                    dict(
+                        label=str(int(y)),
+                        method="animate",
+                        args=[
+                            [str(int(y))],
+                            {
+                                "frame": {"duration": 0, "redraw": True},
+                                "transition": {"duration": 0},
+                                "mode": "immediate"
+                            }
+                        ]
+                    )
+                    for y in years
+                ]
+            )
+        ]
+    )
+
+    fig.show()
+```
+
+## Summary of Findings
+
+- There are no NA values for any of the columns in this dataset
+- The ranges for all value columns are quite high
+- The standard deviations of civilian labor force, employed, and unemployed are all more than double the means
+- There are no 0 values for any columns in the dataset
+- The distributions of all value columns are heavily right-skewed (except for unemployment rate, which is only moderately right-skewed)
+- After using a logarithmic scale, civilian labor force, employed, and unemployed are actually extremely normally distributed
+- There appears to be high correlation between civilian labor force, employed, and unemployed
+- Unemployment rate appears to be only positively correlated with unemployed
+- Notably there are missing counties in a few places:
+    - One county in SD, which looks like it may be on a reservation
+    - A few counties in Virginia, mostly very small but one large one in Norfolk
+    - **The ENTIRE state of Louisiana**
+- The maps for civilian labor force, employed, and unemployed all look fairly uniform, with large population centers being more lightly colored (higher number)
+- The map for unemployment rate is more varied, with some clear geographical trends, such as the middle of the country generally having lower unemployment rates.
