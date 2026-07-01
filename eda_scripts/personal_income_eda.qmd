@@ -1,0 +1,70 @@
+
+```{python}
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+import subprocess
+import sys
+from skimpy import skim
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+# Load data
+df = pd.read_sql_table("personal_income", engine)
+cols = df.columns
+```
+
+### Missingness
+
+```{python}
+# return number and percentage of NA values in each column
+print(skim(df))
+```
+
+```{python}
+# check for zero values in each column 
+[df[df[i].isin([0, "0", 0.0])] for i in cols]
+```
+
+### Summary Stats
+
+```{python}
+print(df.describe().round(2))
+```
+
+### Statitical Distribution Plots
+
+```{python}
+
+# Hisogram
+sns.histplot(data=df, x=cols[2])
+plt.show()
+```
+
+### Checking Intra-Data-Source Correlation
+
+```{python}
+sns.pairplot(df, corner=True)
+plt.show()
+```
+
+
+### Geographic Distribution
+
+```{python}
+
+```
