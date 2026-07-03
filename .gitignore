@@ -9,7 +9,6 @@ Thumbs.db
 **/*.csv
 **/*.xls
 **/*.xlsx
-**/*.txt
 
 # VS code settings
 .vscode/
