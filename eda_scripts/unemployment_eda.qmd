@@ -73,202 +73,24 @@ plt.show()
 
 ### Geographic Distribution
 
-#### Missingness Check
 ```{python}
-# Update these:
-eda_table_name = "Unemployment"
+# load counties map data
+geojson_path = data_dir / "county_fips_codes/geojson_counties_fips.json"
 
-# Basic template, needs no changes
-with urllib.request.urlopen(
-        "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
-    ) as response:
-        counties_geojson = json.load(response)
-
-map_df = df[["year", "county_id"]].dropna().copy()
-
-## Get unique years
-years = sorted(map_df["year"].dropna().unique())
-
-frames = []
-
-## make one frame per year for time analysis
-for year in years:
-    df_year = map_df[map_df["year"] == year].copy()
-
-    ## Create df that just checks whether that county has any data
-    county_overlay = (
-        df_year[["county_id"]]
-        .drop_duplicates()
-        .assign(has_data = 1)
-    )
-
-    ## Create the choropleth overlay
-    choropleth = go.Choroplethmap(
-        geojson=counties_geojson,
-        locations=county_overlay["county_id"],
-        z=county_overlay["has_data"],
-        featureidkey="id",
-        colorscale=[[0, "#fff9f9"], [1, "#2cb94f"]],
-        zmin=0,
-        zmax=1,
-        marker_opacity=0.35,
-        marker_line_width=0.3,
-        showscale=False,
-        hovertemplate="County FIPS: %{location}<br>Has data: Yes<extra></extra>"
-    )
-
-    ## Append this year to the frame
-    frames.append(
-        go.Frame(
-            data=[choropleth],
-            name=str(int(year))
-        )
-    )
-
-## Error if there are no years for some reasdon
-if not frames:
-    raise ValueError(f"No valid yearly data found for {eda_table_name}")
-
-fig = go.Figure(
-    data = frames[0].data,
-    frames = frames
-)
-    
-## Make it look nice
-fig.update_layout(
-    title=f"{eda_table_name}: county coverage by year",
-    map=dict(
-        style="carto-positron",
-        center=dict(lat=37.8, lon=-96),
-        zoom=3
-    ),
-    margin=dict(l=0, r=0, t=50, b=0),
-    updatemenus=[
-        dict(
-            type="buttons",
-            showactive=False,
-            x=0.05,
-            y=0.95,
-            buttons=[
-                dict(
-                    label="Play",
-                    method="animate",
-                    args=[
-                        None,
-                        {
-                            "frame": {"duration": 700, "redraw": True},
-                            "transition": {"duration": 300},
-                            "fromcurrent": True
-                        }
-                    ]
-                ),
-                dict(
-                    label="Pause",
-                    method="animate",
-                    args=[
-                        [None],
-                        {
-                            "frame": {"duration": 0, "redraw": False},
-                            "transition": {"duration": 0},
-                            "mode": "immediate"
-                        }
-                    ]
-                )
-            ]
-        )
-    ],
-    sliders=[
-        dict(
-            active=0,
-            currentvalue={"prefix": "Year: "},
-            pad={"t": 30},
-            steps=[
-                dict(
-                    label=str(int(y)),
-                    method="animate",
-                    args=[
-                        [str(int(y))],
-                        {
-                            "frame": {"duration": 0, "redraw": True},
-                            "transition": {"duration": 0},
-                            "mode": "immediate"
-                        }
-                    ]
-                )
-                for y in years
-            ]
-        )
-    ]
-)
-
-fig.show()
+with open(geojson_path, "r") as f:
+    counties_geojson = json.load(f)
 ```
 
-#### Values by County
 
 ```{python}
-# Update these:
-eda_table_name = "Unemployment"
-cols_to_use = [1,2,3,4]
-
-# Basic template, needs no changes
-with urllib.request.urlopen(
-        "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
-    ) as response:
-        counties_geojson = json.load(response)
-
-## one map per column
-for i in cols_to_use:
-    value_col = cols[i]
-    map_df = df[["year", "county_id", value_col]].dropna().copy()
-
-    ## Get unique years
-    years = sorted(map_df["year"].dropna().unique())
-
-    frames = []
-
-    value_min = map_df[value_col].min()
-    value_max = map_df[value_col].max()
-
-    ## make one frame per year for time analysis
-    for year in years:
-        df_year = map_df[map_df["year"] == year].copy()
-
-        ## Create the choropleth overlay
-        choropleth = go.Choroplethmap(
-            geojson=counties_geojson,
-            locations=df_year["county_id"],
-            z=df_year[value_col],
-            featureidkey="id",
-            colorscale="Viridis",
-            zmin=value_min,
-            zmax=value_max,
-            marker_opacity=0.5,
-            marker_line_width=0.3,
-            colorbar=dict(title=value_col),
-            hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
-        )
-
-        ## Append this year to the frame
-        frames.append(
-            go.Frame(
-                data=[choropleth],
-                name=str(int(year))
-            )
-        )
-
-    ## Error if there are no years for some reasdon
-    if not frames:
-        raise ValueError(f"No valid yearly data found for {value_col}")
-
-    fig = go.Figure(
-        data = frames[0].data,
-        frames = frames
-    )
-        
-    ## Make it look nice
+# define map layout function
+def apply_map_layout_and_controls(fig, title_text, years):
+    """
+    Applies the carto-positron map style, playback menus, and time sliders
+    to an existing Plotly animation figure.
+    """
     fig.update_layout(
-        title=f"{eda_table_name}: {value_col} by county and year",
+        title=title_text,
         map=dict(
             style="carto-positron",
             center=dict(lat=37.8, lon=-96),
@@ -285,26 +107,12 @@ for i in cols_to_use:
                     dict(
                         label="Play",
                         method="animate",
-                        args=[
-                            None,
-                            {
-                                "frame": {"duration": 700, "redraw": True},
-                                "transition": {"duration": 300},
-                                "fromcurrent": True
-                            }
-                        ]
+                        args=[None, {"frame": {"duration": 700, "redraw": True}, "transition": {"duration": 300}, "fromcurrent": True}]
                     ),
                     dict(
                         label="Pause",
                         method="animate",
-                        args=[
-                            [None],
-                            {
-                                "frame": {"duration": 0, "redraw": False},
-                                "transition": {"duration": 0},
-                                "mode": "immediate"
-                            }
-                        ]
+                        args=[[None], {"frame": {"duration": 0, "redraw": False}, "transition": {"duration": 0}, "mode": "immediate"}]
                     )
                 ]
             )
@@ -318,20 +126,141 @@ for i in cols_to_use:
                     dict(
                         label=str(int(y)),
                         method="animate",
-                        args=[
-                            [str(int(y))],
-                            {
-                                "frame": {"duration": 0, "redraw": True},
-                                "transition": {"duration": 0},
-                                "mode": "immediate"
-                            }
-                        ]
+                        args=[[str(int(y))], {"frame": {"duration": 0, "redraw": True}, "transition": {"duration": 0}, "mode": "immediate"}]
                     )
                     for y in years
                 ]
             )
         ]
     )
+    return fig
+```
+
+
+#### Missingness Check
+```{python}
+# create map of counties for which we have data over time
+def plot_county_coverage(df, table_name, value_col):
+    map_df = df[["year", "county_id"]].dropna().drop_duplicates()
+    years = sorted(map_df["year"].unique())
+    frames = []
+
+    # Compile chronological frame tracking data
+    for year in years:
+        df_year = map_df[map_df["year"] == year]
+        frames.append(
+            go.Frame(
+                data=[
+                    go.Choroplethmap(
+                        locations=df_year["county_id"],
+                        z=[1] * len(df_year),  
+                    )
+                ],
+                name=str(int(year))
+            )
+        )
+
+    if not frames:
+        raise ValueError(f"No valid yearly data found for {table_name}")
+
+    # Create base map matching geojson object
+    initial_year_data = map_df[map_df["year"] == years[0]]
+    fig = go.Figure(
+        data=[
+            go.Choroplethmap(
+                geojson=counties_geojson, # References global object directly
+                locations=initial_year_data["county_id"],
+                z=[1] * len(initial_year_data),
+                featureidkey="id",
+                colorscale=[[0, "#fff9f9"], [1, "#2cb94f"]],
+                zmin=0,
+                zmax=1,
+                marker_opacity=0.35,
+                marker_line_width=0.3,
+                showscale=False,
+                hovertemplate="County FIPS: %{location}<br>Has data: Yes<extra></extra>"
+            )
+        ],
+        frames=frames
+    )
+        
+    # Map styling and playback controls
+    title_text = f"{table_name}: {value_col} by county and year"
+    fig = apply_map_layout_and_controls(fig, title_text, years)
+
+    return fig
+
+plot_county_coverage(df, "Unemployment", "county coverage")
+```
+
+
+
+#### Values by County
+
+```{python}
+# create a choropleth map of counties for a set of desired variables in the df
+
+# Update these:
+eda_table_name = "Unemployment"
+cols_to_use = [1,2,3,4]
+
+## one map per column
+for i in cols_to_use:
+    value_col = cols[i]
+    map_df = df[["year", "county_id", value_col]].dropna()
+
+    ## Get unique years
+    years = sorted(map_df["year"].dropna().unique())
+
+    frames = []
+
+    value_min = map_df[value_col].min()
+    value_max = map_df[value_col].max()
+
+
+    frames = []
+    for year in years:
+        df_year = map_df[map_df["year"] == year] # dropped .copy() for speed
+        
+        frames.append(
+            go.Frame(
+                data=[
+                    go.Choroplethmap(
+                        locations=df_year["county_id"],
+                        z=df_year[value_col]
+                    )
+                ],
+                name=str(int(year))
+            )
+        )
+
+    if not frames:
+        raise ValueError(f"No valid yearly data found for {value_col}")
+
+    initial_year_df = map_df[map_df["year"] == years[0]]
+
+    fig = go.Figure(
+        data=[
+            go.Choroplethmap(
+                geojson=counties_geojson, 
+                locations=initial_year_df["county_id"],
+                z=initial_year_df[value_col],
+                featureidkey="id",
+                colorscale="Viridis",
+                zmin=value_min,
+                zmax=value_max,
+                marker_opacity=0.5,
+                marker_line_width=0.3,
+                colorbar=dict(title=value_col),
+                hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
+            )
+        ],
+        frames=frames
+    )
+        
+    ## Make it look nice
+    title_text = f"{eda_table_name}: {value_col} by county and year"
+    fig = apply_map_layout_and_controls(fig, title_text, years)
 
     fig.show()
 ```
