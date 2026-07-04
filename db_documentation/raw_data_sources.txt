@@ -14,7 +14,7 @@ business_patterns : https://www.census.gov/programs-surveys/cbp.html
 
 gdp_data.csv : https://www.bea.gov/data/gdp/gdp-by-county
 
-us.1990_2024.20ages.adjusted.txt : https://www.ers.usda.gov/data-products/county-level-data-sets/county-level-data-sets-download-data
+us.1990_2024.20ages.adjusted.txt : https://seer.cancer.gov/popdata.thru.2023/download.html
 
 Residential_Construction_Permits_by_County_6297027898887955680.csv : https://catalog.data.gov/dataset/residential-construction-permits-by-county
 
