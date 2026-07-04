@@ -39,19 +39,20 @@ centroids_df = pd.read_csv(
 
 ```{python}
 centroids_df = centroids_df.rename(columns = {
-    "FIPS_CD": "combined_state_county_code",
+    "FIPS_CD": "county_id",
     "LONGITUDE": "county_longitude",
     "LATITUDE": "county_latitude"
 })
 
-centroids_df["combined_state_county_code"] = (centroids_df["combined_state_county_code"]).str.zfill(5)
+centroids_df["county_id"] = (centroids_df["county_id"]).str.zfill(5)
 
-centroids_df["county_centroid_longitude"] = pd.to_numeric(
+centroids_df["centroid_lon"] = pd.to_numeric(
     centroids_df["county_longitude"], errors="coerce"
 )
-centroids_df["county_centroid_latitude"] = pd.to_numeric(
+centroids_df["centroid_lat"] = pd.to_numeric(
     centroids_df["county_latitude"], errors="coerce"
 )
+```
 ### FUNCSTAT Column data definition
 A:  Identifies an active government providing primary general-purpose functions.
 B:  Identifies an active government that is partially consolidated with another government but with separate officials providing primary general-purpose functions.
@@ -102,8 +103,8 @@ df_final["county_id"] = df_final["state_fips_code"] + df_final["county_fips_code
 
 ```{python}
 df_final = df_final.merge(
-    centroids_df[["combined_state_county_code", "county_centroid_longitude", "county_centroid_latitude"]],
-    on="combined_state_county_code",
+    centroids_df[["county_id", "centroid_lon", "centroid_lat"]],
+    on="county_id",
     how="left"
 )
 ```
@@ -113,7 +114,7 @@ df_final.describe(include=[object])
 ```
 
 ```{python}
-centroid_missing = df_final[df_final[["county_centroid_longitude", "county_centroid_latitude"]].isna().any(axis = 1)]
+centroid_missing = df_final[df_final[["centroid_lon", "centroid_lat"]].isna().any(axis = 1)]
 centroid_missing
 # Looks like these are all non-mainland counties so we should be good
 ```
