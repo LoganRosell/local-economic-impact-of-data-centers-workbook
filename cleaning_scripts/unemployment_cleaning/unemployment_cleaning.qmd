@@ -51,7 +51,8 @@ df_final = df_raw.pivot(
 ### Drop Non-Counties
 
 ```{python}
-df_final = df_final[df_final['Area_Name'].str.contains('County', na = False)].reset_index(drop=True)
+# Lousiana does not have "counties" they have "parishes"
+df_final = df_final[df_final['Area_Name'].str.contains('County|Parish', na=False, case=False)].reset_index(drop=True)
 ```
 
 ### Pad FIPS
