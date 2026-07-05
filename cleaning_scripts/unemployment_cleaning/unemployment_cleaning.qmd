@@ -101,6 +101,11 @@ def trim_years(df):
 df_final = trim_years(df_final)
 ```
 
+```{python}
+# remove state-level observations for DC since we already have the county level observations with the same data
+df_final = df_final[df_final["county_id"] != "11000"]
+```
+
 ## EDA
 
 ### Summary Statistics
