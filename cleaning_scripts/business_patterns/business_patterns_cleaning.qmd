@@ -292,6 +292,11 @@ df_final["naics_industry_code"] = df_final["naics_industry_code"].str.replace("-
 ```
 
 ```{python}
+# remove all state-wide abbreviations
+df_final = df_final[df_final["county_id"].str[2:5] != "999"]
+```
+
+```{python}
 # setup connection variables to local sql db
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
