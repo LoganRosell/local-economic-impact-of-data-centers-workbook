@@ -94,6 +94,58 @@ df_final.columns = df_final.columns.str.rstrip('_')
 ```
 
 ```{python}
+# convert VA independent cities to parent county and combine values
+city_to_parent_county = {
+    '51510': '51013',
+    '51515': '51019',
+    '51520': '51191',
+    '51530': '51163',
+    '51540': '51003',
+    '51550': '51131',
+    '51570': '51053',
+    '51580': '51005',
+    '51590': '51143',
+    '51595': '51081',
+    '51600': '51059',
+    '51610': '51059',
+    '51620': '51175',
+    '51630': '51177',
+    '51640': '51035',
+    '51650': '51095',
+    '51660': '51165',
+    '51670': '51149',
+    '51678': '51163',
+    '51680': '51031',
+    '51683': '51153',
+    '51685': '51153',
+    '51690': '51089',
+    '51700': '51095',
+    '51710': '51095',
+    '51720': '51195',
+    '51730': '51053',
+    '51735': '51199',
+    '51740': '51095',
+    '51750': '51121',
+    '51760': '51087',
+    '51770': '51161',
+    '51775': '51161',
+    '51790': '51015',
+    '51800': '51131',
+    '51810': '51131',
+    '51820': '51015',
+    '51830': '51095',
+    '51840': '51069'
+}
+
+def roll_up_va_cities_to_county(df):
+    df["county_id"] = df["county_id"].replace(city_to_parent_county)
+    df = df.groupby(["county_id", "year"], as_index=False).sum()
+    return df
+
+df_final = roll_up_va_cities_to_county(df_final)
+```
+
+```{python}
 # remapping Oglala Lakota County code to fips standard
 df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
 ```
