@@ -33,6 +33,8 @@ df_raw = pd.read_csv(
 - combine all rows with the same county and year values into one row representing the average for that county in that year (do this for mean pred and max pred)
 - update column names to reflect annual aggregation 
 - compute the yearly standard deviation for each county for mean daily pred
+- Convert all VA independent cities to parent county
+- Convert Oglala Lakota County code to standard FIPS version
 
 ```{python}
 # add leading zeros to state and county fips codes
@@ -55,6 +57,54 @@ df_raw["pm25_max_pred"] = df_raw["pm25_max_pred"].astype(float)
 ```{python}
 # remove uneeded columns
 df_raw = df_raw.drop(columns=["date", "statefips", "countyfips"])
+```
+
+```{python}
+# convert fips codes for VA independent city to be parent county_id
+city_to_parent_county = {
+    '51510': '51013',
+    '51515': '51019',
+    '51520': '51191',
+    '51530': '51163',
+    '51540': '51003',
+    '51550': '51131',
+    '51570': '51053',
+    '51580': '51005',
+    '51590': '51143',
+    '51595': '51081',
+    '51600': '51059',
+    '51610': '51059',
+    '51620': '51175',
+    '51630': '51177',
+    '51640': '51035',
+    '51650': '51095',
+    '51660': '51165',
+    '51670': '51149',
+    '51678': '51163',
+    '51680': '51031',
+    '51683': '51153',
+    '51685': '51153',
+    '51690': '51089',
+    '51700': '51095',
+    '51710': '51095',
+    '51720': '51195',
+    '51730': '51053',
+    '51735': '51199',
+    '51740': '51095',
+    '51750': '51121',
+    '51760': '51087',
+    '51770': '51161',
+    '51775': '51161',
+    '51790': '51015',
+    '51800': '51131',
+    '51810': '51131',
+    '51820': '51015',
+    '51830': '51095',
+    '51840': '51069'
+}
+
+df_raw["county_id"] = df_raw["county_id"].replace(city_to_parent_county)
+
 ```
 
 ```{python}
