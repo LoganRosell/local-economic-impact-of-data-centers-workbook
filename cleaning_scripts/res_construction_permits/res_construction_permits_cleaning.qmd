@@ -94,6 +94,11 @@ df_final.columns = df_final.columns.str.rstrip('_')
 ```
 
 ```{python}
+# remapping Oglala Lakota County code to fips standard
+df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
+```
+
+```{python}
 # remove years outside of analysis window
 def trim_years(df):
     df = df[df["year"] >= 2001]

@@ -93,6 +93,11 @@ df_final = pd.merge(df_sd, df_final, on = ["year", "county_id"], how = "left")
 ```
 
 ```{python}
+# remapping Oglala Lakota County code to fips standard
+df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
+```
+
+```{python}
 # setup connection variables to local sql db
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
