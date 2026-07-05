@@ -121,6 +121,43 @@ def trim_years(df):
 df_final = trim_years(df_final)
 ```
 
+## Handel Virgina County Codes Mapping
+
+The BEA creates synthetic FIPS codes for independent cities and the county they exist within. Documention on this within the apendix of their methodology here: https://www.bea.gov/sites/default/files/methodologies/lapi2016.pdf
+
+We will be attributing the combined measurments for the independent city and its parent county just the standard county_id rather than the synthetic id. Not all our data sources use the synthetic id meaning that the county_id is more universal. 
+
+```{python}
+
+va_synthetic_to_standard_mapping = {
+    '51901': '51003',
+    '51903': '51005',
+    '51907': '51015',
+    '51911': '51031',
+    '51913': '51035',
+    '51918': '51053',
+    '51919': '51059',
+    '51921': '51069',
+    '51923': '51081',
+    '51929': '51089',
+    '51931': '51095',
+    '51933': '51121',
+    '51939': '51143',
+    '51941': '51149',
+    '51942': '51153',
+    '51944': '51161',
+    '51945': '51163',
+    '51947': '51165',
+    '51949': '51175',
+    '51951': '51177',
+    '51953': '51191',
+    '51955': '51195',
+    '51958': '51199'
+}
+
+df_final["county_id"] = df_final["county_id"].replace(va_synthetic_to_standard_mapping)
+```
+
 ## EDA
 
 ### Summary Statistics
