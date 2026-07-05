@@ -169,6 +169,13 @@ va_synthetic_to_standard_mapping = {
 df_final["county_id"] = df_final["county_id"].replace(va_synthetic_to_standard_mapping)
 ```
 
+```{python}
+# remove independent cities now that they are attributed to parent county
+va_indy_cities = ['51510', '51515', '51520', '51530', '51540', '51550', '51570', '51580', '51590', '51595', '51600', '51610', '51620', '51630', '51640', '51650', '51660', '51670', '51678', '51680', '51683', '51685', '51690', '51700', '51710', '51720', '51730', '51735', '51740', '51750', '51760', '51770', '51775', '51790', '51800', '51810', '51820', '51830', '51840']
+
+df_final = df_final[~df_final['county_id'].isin(va_indy_cities)]
+```
+
 ## EDA
 
 ### Summary Statistics
