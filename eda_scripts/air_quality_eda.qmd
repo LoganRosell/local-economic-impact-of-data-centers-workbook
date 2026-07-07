@@ -59,16 +59,35 @@ print(df.describe().round(2))
 
 ```{python}
 
-# Hisogram
-sns.histplot(data=df, x=cols[2])
+# Hisograms
+
+# median daily average for a given year and county
+sns.histplot(data=df, x=df["pm25_med_daily_avg"])
 plt.show()
+
+# average daily maxiumum for a given year and county
+sns.histplot(data=df, x=df["pm25_max_daily_avg"])
+plt.show()
+
+# average daily average for a given year and county
+sns.histplot(data=df, x=df["pm25_mean_daily_avg"])
+plt.show()
+```
+
+```{python}
+# taking a closer look at high values
+
+# select county-years with usually high average daily max values
+df[df["pm25_max_daily_avg"] > 20]
+
 ```
 
 ### Checking Intra-Data-Source Correlation
 
+All columns in the air dataset measure the same variable, they will all be correlated. 
 ```{python}
-sns.pairplot(df, corner=True)
-plt.show()
+#sns.pairplot(df, corner=True, kind = "reg", diag_kind = "kde")
+#plt.show()
 ```
 
 
@@ -194,6 +213,21 @@ def plot_county_coverage(df, table_name, value_col):
 plot_county_coverage(df, "Air Quality", "county coverage")
 ```
 
+Starting in 2020 there are a collection of counties that stop being representing in our dataset. They are not showing up as NA values for the years beyond 2020, they simply stop having entried for that county all together. County id 35003 in New Mexico is a good example of this issue. 
+
+I double checked if this data existed right after loading in the raw data in the cleaning script to rule out bugs in the cleaning code. There is data for every day of 2019 for county 35003 but none for the same county in 2020. 
+
+Use the following filtering logic to verrify this after loading in the raw data:
+df_raw[(df_raw["year"]==2020) & (df_raw["statefips"] == "35") & (df_raw["countyfips"]=="3")]
+
+```{python}
+# finding all county ids which appear in 2019 but not in 2020
+all_2019_counties = set(df["county_id"][df["year"]==2019])
+all_2020_counties = set(df["county_id"][df["year"]==2020])
+
+disappeared_counties = list(all_2019_counties ^ all_2020_counties)
+
+```
 
 
 #### Values by County
