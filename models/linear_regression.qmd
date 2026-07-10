@@ -45,7 +45,7 @@ county_df = pd.read_sql_table("us_counties", engine)
 ### Helper Functions
 
 ```{python}
-def county_average(df, include_cols = None):
+def county_average(df, prefix, include_cols = None):
     if "county_id" not in df.columns:
         raise ValueError("No `county_id` column found.")
 
@@ -65,12 +65,20 @@ def county_average(df, include_cols = None):
     # Since there are no years for datacenters, take average of all years for each county
     out_df = (df[["county_id"] + include_cols].groupby("county_id", as_index = False).mean())
 
+    rename_map = {
+        col: f"{prefix}{col}"
+        for col in out_df.columns
+        if col != "county_id"
+    }
+
+    out_df = out_df.rename(columns = rename_map)
+
     return out_df
 ```
 
 ```{python}
 def combine_dfs(base_df, dfs_to_join):
-    out_df = base_df
+    out_df = base_df.copy()
 
     for i, df in enumerate(dfs_to_join):
         if "county_id" not in df.columns:
@@ -79,9 +87,20 @@ def combine_dfs(base_df, dfs_to_join):
         # Make sure all tables only have one row per county
         dupes = df["county_id"][df["county_id"].duplicated()].unique()
         if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)})
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)}")
 
         out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+
+    missing_summary_table = (
+        out_df.isna()
+        .mean()
+        .sort_values(ascending = False)
+        .rename("missing_share")
+        .reset_index()
+        .rename(columns={"index":"column"})
+    )
+
+    print("Missing Summary: \n", missing_summary_table)
 
     return out_df
 ```
