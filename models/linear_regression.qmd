@@ -37,6 +37,7 @@ inc_df = pd.read_sql_table("personal_income", engine)
 pop_df = pd.read_sql_table("population", engine)
 perm_df = pd.read_sql_table("res_construction_permits", engine)
 emp_df = pd.read_sql_table("unemployment", engine)
+county_df = pd.read_sql_table("us_counties", engine)
 ```
 
 ## Create Table for Regressions
@@ -67,3 +68,20 @@ def county_average(df, include_cols = None):
     return out_df
 ```
 
+```{python}
+def combine_dfs(base_df, dfs_to_join):
+    out_df = base_df
+
+    for i, df in enumerate(dfs_to_join):
+        if "county_id" not in df.columns:
+            raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
+
+        # Make sure all tables only have one row per county
+        dupes = df["county_id"][df["county_id"].duplicated()].unique()
+        if len(dupes) > 0:
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)})
+
+        out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+
+    return out_df
+```
