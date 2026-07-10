@@ -5,6 +5,7 @@ format: html
 
 ```{python}
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 import numpy as np
 from pathlib import Path
 import os
@@ -33,8 +34,36 @@ air_df = pd.read_sql_table("air_quality", engine)
 bus_df = pd.read_sql_table("business_patterns", engine)
 gdp_df = pd.read_sql_table("gdp", engine)
 inc_df = pd.read_sql_table("personal_income", engine)
-dc_df = pd.read_sql_table("air_quality", engine)
 pop_df = pd.read_sql_table("population", engine)
 perm_df = pd.read_sql_table("res_construction_permits", engine)
 emp_df = pd.read_sql_table("unemployment", engine)
 ```
+
+## Create Table for Regressions
+
+### Helper Functions
+
+```{python}
+def county_average(df, include_cols = None):
+    if "county_id" not in df.columns:
+        raise ValueError("No `county_id` column found.")
+
+    if include_cols is None:
+        include_cols = [
+            col for col in df.columns
+            if col != "county_id" and is_numeric_dtype(df[col])
+        ]
+    else:
+        non_num_cols = [
+            col for col in include_cols 
+            if col =="county_id" or not is_numeric_dtype(df[col])
+            ]
+        if non_num_cols:
+            raise ValueError(f"Only numeric columns are allowed in `include_cols`. Non-numeric columns: {non_num_cols}")
+
+    # Since there are no years for datacenters, take average of all years for each county
+    out_df = (df[["county_id"] + include_cols].groupby("county_id", as_index = False).mean())
+
+    return out_df
+```
+
