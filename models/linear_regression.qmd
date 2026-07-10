@@ -106,9 +106,13 @@ def combine_dfs(base_df, dfs_to_join):
 ### Create final table
 
 ```{python}
+grouped_bus_df = bus_df.groupby(["county_id", "year"], as_index = False).sum(numeric_only=True)
+```
+
+```{python}
 # Average all necessary dfs by county
 final_air_df = county_average(air_df, include_cols = ["pm25_mean_daily_avg"])
-final_bus_df = county_average(bus_df, include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
+final_bus_df = county_average(grouped_bus_df, include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
 final_gdp_df = county_average(gdp_df, include_cols = ["real_gdp_2017_dollars_thousands", "quantity_index_gdp"])
 final_inc_df = county_average(inc_df, include_cols = ["personal_income_thousands_of_dollars"])
 final_pop_df = county_average(pop_df, include_cols = ["population"])
@@ -136,7 +140,27 @@ final_df
 ### Clean up final table
 
 ```{python}
-# Make columns per-capita 
+# Make applicable columns per-capita
+per_capita_cols = [
+    "tot_employee_count",
+    "annual_payroll",
+    "tot_establishment_count",
+    "real_gdp_2017_dollars_thousands",
+    "personal_income_thousands_of_dollars",
+    "all_permits",
+    "single_family_permits",
+    "all_multifamily_permits",
+]
+
+for col in per_capita_cols:
+    final_df[f"{col}_per_capita"] = final_df[col] / final_df["population"]
+
+final_df = final_df.drop(columns=per_capita_cols)
+```
+
+```{python}
+# Rename for clarity
+final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
 ```
 
 ## Linear Regressions
