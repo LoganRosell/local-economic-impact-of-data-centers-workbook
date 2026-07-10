@@ -3,3 +3,38 @@ title: "Linear Regression"
 format: html
 ---
 
+```{python}
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+import subprocess
+import sys
+from skimpy import skim
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+# Load data
+dc_df = pd.read_sql_table("data_centers", engine)
+air_df = pd.read_sql_table("air_quality", engine)
+bus_df = pd.read_sql_table("business_patterns", engine)
+gdp_df = pd.read_sql_table("gdp", engine)
+inc_df = pd.read_sql_table("personal_income", engine)
+dc_df = pd.read_sql_table("air_quality", engine)
+pop_df = pd.read_sql_table("population", engine)
+perm_df = pd.read_sql_table("res_construction_permits", engine)
+emp_df = pd.read_sql_table("unemployment", engine)
+```
