@@ -212,5 +212,77 @@ def run_linear_regression(df, y_col, x_cols):
     print(vif_df)
 
     return model
-
 ```
+
+### Regressions and Analysis
+
+#### Air Quality
+
+```{python}
+run_linear_regression(final_df, "pm25_mean_daily_avg", ["data_center_count", "population", "tot_establishment_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita", "all_permits_per_capita"])
+```
+
+Air Quality Analysis: 
+
+* Overall Adj. R-squared of the model is 0.243
+* Data centers have a high p-value and thus are not statistically significant in this model
+* The residuals are not closely centered on 0, and seem to form a vertical band towards the middle of the x-axis, indicating heteroskedasticity. Additioanlly, there are several major outliers.
+* The Q-Q plot indicates approximate normality in the center, but there are some departures from normality towards the tails
+* All VIFs are very low, indicating that multicollinearity is not a concern here.
+
+#### GDP Index
+
+```{python}
+run_linear_regression(final_df, "quantity_index_gdp", ["data_center_count", "population", "unemployment_rate", "tot_employee_count_per_capita", "personal_income_thousands_of_dollars_per_capita", "tot_establishment_count_per_capita"])
+```
+
+GDP Index Analysis:
+
+* Overall Adj. R-squared of the model is 0.084
+* Data centers have a high p-value and thus are not statistically significant in this model
+* Residuals are densely clustered around a single point indicating heteroskedasticity, and there are very high outliers
+* The Q-Q plot shows strong departures from normality
+* All VIFs are very low, so there is not high multicollinearity
+
+
+#### Unemployment Rate
+
+```{python}
+run_linear_regression(final_df, "unemployment_rate", ["data_center_count", "population", "personal_income_thousands_of_dollars_per_capita", "tot_establishment_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita"])
+```
+
+Unemployment Rate Analysis:
+
+* Overall Adj. R-squared of the model is 0.261
+* Data centers have a high p-value and thus are not statistically significant in this model
+* Residuals form a V-shaped pattern indicating heteroskedasticity, and there are very high outliers
+* The Q-Q plot shows strong departures from normality on the top quantile
+* All VIFs are very low, so there is not high multicollinearity
+
+#### Establishment Count Per Capita
+
+```{python}
+run_linear_regression(final_df, "tot_establishment_count_per_capita", ["data_center_count", "population", "tot_employee_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita"])
+```
+
+Establishment Analysis:
+
+* Overall Adj. R-squared of the model is 0.241
+* Data centers have a high p-value and thus are not statistically significant in this model
+* Residuals form a clustered shape around the middle indicating heteroskedasticity, and there are very high outliers
+* The Q-Q plot shows strong departures from normality on both ends
+* All VIFs are very low, so there is not high multicollinearity
+
+#### Residential Construction Permits
+
+```{python}
+run_linear_regression(final_df, "all_permits_per_capita", ["data_center_count", "population", "pm25_mean_daily_avg", "unemployment_rate", "tot_employee_count_per_capita", "tot_establishment_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita"])
+```
+
+Establishment Analysis:
+
+* Overall Adj. R-squared of the model is 0.108
+* Data centers have a p-value of 0.003 and thus **are** statistically signficant at the 0.01 level
+* Residuals form a clustered wedge shape indicating heteroskedasticity, and there are some large outliers
+* The Q-Q plot shows strong departures from normality on the upper tail, but is relatively normally distributed towards the bottom and middle
+* All VIFs are very low, so there is not high multicollinearity
