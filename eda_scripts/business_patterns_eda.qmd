@@ -38,6 +38,14 @@ cols = df.columns
 ```{python}
 # return number and percentage of NA values in each column
 print(skim(df))
+
+# check by industry code
+
+industry_code_list = list(df["naics_industry_code"].unique())
+
+for i in industry_code_list:
+    print(i)
+    print(skim(df[df["naics_industry_code"]==i].reset_index(drop=True)))
 ```
 
 ```{python}
@@ -56,9 +64,14 @@ print(df.describe().round(2))
 ```{python}
 
 # Hisogram
-sns.histplot(data=df, x=cols[2])
+sns.histplot(data=df, x=df["tot_employee_count"])
+plt.show()
+
+sns.histplot(data=df, x=df["tot_establishment_count"])
 plt.show()
 ```
+
+Many of these figures are extremly left skewed by a few wealthy/populous counties. 
 
 ### Checking Intra-Data-Source Correlation
 
