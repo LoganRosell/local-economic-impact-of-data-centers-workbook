@@ -51,7 +51,7 @@ county_df = pd.read_sql_table("us_counties", engine)
 ### Helper Functions
 
 ```{python}
-def county_average(df, prefix, include_cols = None):
+def county_average(df, include_cols = None):
     if "county_id" not in df.columns:
         raise ValueError("No `county_id` column found.")
 
@@ -70,14 +70,6 @@ def county_average(df, prefix, include_cols = None):
 
     # Since there are no years for datacenters, take average of all years for each county
     out_df = (df[["county_id"] + include_cols].groupby("county_id", as_index = False).mean())
-
-    rename_map = {
-        col: f"{prefix}_{col}"
-        for col in out_df.columns
-        if col != "county_id"
-    }
-
-    out_df = out_df.rename(columns = rename_map)
 
     return out_df
 ```
@@ -115,13 +107,13 @@ def combine_dfs(base_df, dfs_to_join):
 
 ```{python}
 # Average all necessary dfs by county
-final_air_df = county_average(air_df, "air", include_cols = ["pm25_mean_daily_avg"])
-final_bus_df = county_average(bus_df, "business", include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
-final_gdp_df = county_average(gdp_df, "gdp", include_cols = ["real_gdp_2017_dollars_thousands", "quantity_index_gdp"])
-final_inc_df = county_average(inc_df, "income", include_cols = ["personal_income_thousands_of_dollars"])
-final_pop_df = county_average(pop_df, "population", include_cols = ["population"])
-final_perm_df = county_average(perm_df, "permits", include_cols = ["all_permits", "single_family_permits", "all_multifamily_permits"])
-final_emp_df = county_average(emp_df, "unemployment", include_cols = ["unemployment_rate"])
+final_air_df = county_average(air_df, include_cols = ["pm25_mean_daily_avg"])
+final_bus_df = county_average(bus_df, include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
+final_gdp_df = county_average(gdp_df, include_cols = ["real_gdp_2017_dollars_thousands", "quantity_index_gdp"])
+final_inc_df = county_average(inc_df, include_cols = ["personal_income_thousands_of_dollars"])
+final_pop_df = county_average(pop_df, include_cols = ["population"])
+final_perm_df = county_average(perm_df, include_cols = ["all_permits", "single_family_permits", "all_multifamily_permits"])
+final_emp_df = county_average(emp_df, include_cols = ["unemployment_rate"])
 ```
 
 ```{python}
@@ -144,7 +136,7 @@ final_df
 ### Clean up final table
 
 ```{python}
-
+# Make columns per-capita 
 ```
 
 ## Linear Regressions
@@ -176,7 +168,7 @@ def run_linear_regression(df, y_col, x_cols):
     plt.xlabel("Fitted values")
     plt.ylabel("Residuals")
     plt.title("Residuals vs Fitted Values")
-    plt.show
+    plt.show()
 
     # Check For Normal Distribution
     plt.figure(figsize=(7, 5))
