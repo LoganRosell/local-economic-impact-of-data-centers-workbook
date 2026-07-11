@@ -27,7 +27,12 @@ from scipy.stats import pearsonr
 from sklearn.metrics import PredictionErrorDisplay
 from scipy.stats import probplot
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-import statsmodels.api as sm 
+import statsmodels.api as sm
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -226,5 +231,51 @@ independent_x_vars_df = independent_x_vars_df.drop(columns = [
 ### Logistic Regression
 
 ```{python}
+# set up train and test datasets
+independent_x_vars_df = independent_x_vars_df.dropna()
 
+y = independent_x_vars_df["has_datacenter"]
+X = independent_x_vars_df.drop(columns = ["county_id", "has_datacenter"])
+
+# unify column name formatting
+X.columns = X.columns.astype(str)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57, stratify=y)
+```
+
+
+```{python}
+# scale features since they have very different ranges
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train.values)
+X_test_scaled = scaler.transform(X_test.values)
+```
+
+
+Using class_weight='balanced' since the vast majority of counties do not have a datacenter meaning that if we don't balance the training data it model will tend to just guess that all counties don't have a data center.
+```{python}
+# train the model
+log_reg = LogisticRegression(random_state=57, class_weight='balanced')
+log_reg.fit(X_train_scaled, y_train)
+```
+
+
+```{python}
+# evaluate model performance
+
+y_pred_train = log_reg.predict(X_train_scaled)
+train_acc = sum(y_pred_train == y_train) / len(y_train)
+print(f"Training Accuracy: {train_acc:.4f}")
+
+
+y_pred_test = log_reg.predict(X_test_scaled)
+
+
+ConfusionMatrixDisplay(
+    confusion_matrix=confusion_matrix(y_test, y_pred_test), 
+    display_labels=log_reg.classes_
+).plot()
+
+plt.show()
 ```
