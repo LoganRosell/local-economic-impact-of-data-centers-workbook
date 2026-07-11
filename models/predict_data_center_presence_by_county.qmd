@@ -126,10 +126,104 @@ county_df = county_df[["county_id", "has_datacenter"]]
 
 ```{python}
 # combine all data together
-combined_df = combine_dfs(county_df, dfs_only_2022)
+mega_df = combine_dfs(county_df, dfs_only_2022)
+```
+
+```{python}
+# Make applicable columns per-capita
+def make_per_capita(df, per_capita_cols):
+
+    for col in per_capita_cols:
+        df[f"{col}_per_capita"] = df[col] / df["population"]
+
+    df = df.drop(columns=per_capita_cols)
+    return df
+
+
+per_capita_cols = [
+       'tot_employee_count', 'annual_payroll', 'tot_establishment_count',
+       'est<5', 'est5_9', 'est10_19', 'est20_49', 'est50_99', 'est100_249',
+       'est250_499', 'est500_999', 'est>1000', 'est1000_1500', 'est1500_2500',
+       'est2500_5000', 'est>5000', 'real_gdp_2017_dollars_thousands',
+       'current_gdp_dollars_thousands',
+       'all_permits',
+       'single_family_permits', 'all_multifamily_permits',
+       'multifamily_permits_2_units', 'multifamily_permits_3_4_units',
+       'multifamily_permits_5_or_more_units'
+]
+
+mega_df = make_per_capita(mega_df, per_capita_cols)
 ```
 
 ## Check Model Assumptions
+
+```{python}
+# Check for high correlation between x variables indicating a violation of the independence assumption
+
+corr_matrix = mega_df.corr()
+# Plot heatmap correlations
+plt.figure(figsize=(16, 12))
+sns.heatmap(corr_matrix, cmap="coolwarm", annot=False, vmin=-1, vmax=1)
+plt.title("Correlation Matrix Heatmap")
+plt.show()
+```
+
+
+```{python}
+# drop highly correlated features
+independent_x_vars_df = mega_df.drop(columns = [
+    "pm25_max_sd",
+    "pm25_mean_sd",
+    "pm25_pop_sd",
+    "pm25_max_daily_avg",
+    "pm25_mean_daily_avg",
+    "pm25_pop_daily_avg",
+    "civilian_labor_force",
+    "employed",
+    "unemployed",
+    "all_multifamily_permits_per_capita",
+    "current_gdp_dollars_thousands_per_capita"
+    ])
+
+corr_matrix = independent_x_vars_df.corr()
+# Plot heatmap correlations
+plt.figure(figsize=(16, 12))
+sns.heatmap(corr_matrix, cmap="coolwarm", annot=False, vmin=-1, vmax=1)
+plt.title("Correlation Matrix Heatmap")
+plt.show()
+```
+
+
+```{python}
+# Check VIF
+X = independent_x_vars_df.select_dtypes(include=['number']) 
+X = X.dropna()
+
+vif_data = pd.DataFrame()
+vif_data["feature"] = X.columns
+vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
+
+
+print(vif_data[vif_data["VIF"] > 5])
+```
+
+
+```{python}
+# drop columns with high VIF
+independent_x_vars_df = independent_x_vars_df.drop(columns = [
+    "all_permits_per_capita",
+    "tot_establishment_count_per_capita",
+    "quantity_index_gdp",
+    "pm25_med_sd",
+    "annual_payroll_per_capita",
+    "population",
+    "tot_employee_count_per_capita"
+    ])
+```
+
+## Models
+
+### Logistic Regression
 
 ```{python}
 
