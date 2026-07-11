@@ -46,15 +46,23 @@ engine = create_engine(database_url)
 
 ```{python}
 # Load data
-dc_df = pd.read_sql_table("data_centers", engine)
-air_df = pd.read_sql_table("air_quality", engine)
-bus_df = pd.read_sql_table("business_patterns", engine)
-gdp_df = pd.read_sql_table("gdp", engine)
-inc_df = pd.read_sql_table("personal_income", engine)
-pop_df = pd.read_sql_table("population", engine)
-perm_df = pd.read_sql_table("res_construction_permits", engine)
-emp_df = pd.read_sql_table("unemployment", engine)
-county_df = pd.read_sql_table("us_counties", engine)
+
+# this function cleans up the weird column name formatting SQLAlchemy addes to the df when loading. 
+def load_table(table_name, engine):
+    df = pd.read_sql_table(table_name, engine)
+    df.columns = [str(col) for col in df.columns]
+    return df
+
+
+dc_df = load_table("data_centers", engine)
+air_df = load_table("air_quality", engine)
+bus_df = load_table("business_patterns", engine)
+gdp_df = load_table("gdp", engine)
+inc_df = load_table("personal_income", engine)
+pop_df = load_table("population", engine)
+perm_df = load_table("res_construction_permits", engine)
+emp_df = load_table("unemployment", engine)
+county_df = load_table("us_counties", engine)
 ```
 
 ## Create Table for models
@@ -217,12 +225,17 @@ print(vif_data[vif_data["VIF"] > 5])
 # drop columns with high VIF
 independent_x_vars_df = independent_x_vars_df.drop(columns = [
     "all_permits_per_capita",
-    "tot_establishment_count_per_capita",
     "quantity_index_gdp",
     "pm25_med_sd",
     "annual_payroll_per_capita",
     "population",
-    "tot_employee_count_per_capita"
+    "tot_employee_count_per_capita",
+    "per_capita_personal_income_dollars",
+    'est<5_per_capita', 'est5_9_per_capita', 'est10_19_per_capita',
+       'est20_49_per_capita', 'est50_99_per_capita', 'est100_249_per_capita',
+       'est250_499_per_capita', 'est500_999_per_capita', 'est>1000_per_capita',
+       'est1000_1500_per_capita', 'est1500_2500_per_capita',
+       'est2500_5000_per_capita', 'est>5000_per_capita'
     ])
 ```
 
@@ -237,8 +250,6 @@ independent_x_vars_df = independent_x_vars_df.dropna()
 y = independent_x_vars_df["has_datacenter"]
 X = independent_x_vars_df.drop(columns = ["county_id", "has_datacenter"])
 
-# unify column name formatting
-X.columns = X.columns.astype(str)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57, stratify=y)
 ```
@@ -278,4 +289,33 @@ ConfusionMatrixDisplay(
 ).plot()
 
 plt.show()
+```
+
+#### Interpreting Logistic Model Results
+
+```{python}
+coef_df = pd.DataFrame({
+    'Variable': X.columns,
+    'Coefficient': log_reg.coef_[0]
+})
+
+# Add the intercept
+intercept_df = pd.DataFrame({'Variable': ['Intercept'], 'Coefficient': log_reg.intercept_})
+coef_df = pd.concat([intercept_df, coef_df], ignore_index=True)
+
+print(coef_df)
+```
+
+
+A Durbin-Watson score = 2 indicates perfect independence of the residuals (assumption of Logistic Regression). A score < 2 indicates postive autocorrelation and a score > 2 indicates negative autocorreclation. 
+```{python}
+# Check for independce of errors
+from statsmodels.stats.stattools import durbin_watson
+
+pred_probabilities = log_reg.predict_proba(X)[:, 1]
+
+residuals = y - pred_probabilities
+
+dw_stat = durbin_watson(residuals)
+print("Durbin-Watson:", dw_stat)
 ```
