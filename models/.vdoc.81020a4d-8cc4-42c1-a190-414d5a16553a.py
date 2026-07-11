@@ -1,16 +1,18 @@
----
-title: Predict The Presence of Data Center(s) in a County
-author: Logan Rosell
----
-
-## Goal
-To get a sense of how predictive each of our available x variables are of whether a county does or does not have data centers we will create a simple Logistic Regression model including all variables. While we do know which counties have data centers in them as of 2023, we do not know what year any specific county started having data centers. We also cannot be sure that counties which are not included in the list of those with data centers in 2023 did not previously have a data center at some point during our analysis window which was closed down before 2023 and thus not included in our list of counties with data centers. 
-
-
-
-## Logistic Regression Model
-
-```{python}
+# type: ignore
+# flake8: noqa
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 import numpy as np
@@ -31,15 +33,15 @@ import statsmodels.api as sm
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
-```
-
-```{python}
+#
+#
+#
 # setup connection variables to local sql db
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
-```
-
-```{python}
+#
+#
+#
 # Load data
 dc_df = pd.read_sql_table("data_centers", engine)
 air_df = pd.read_sql_table("air_quality", engine)
@@ -50,13 +52,13 @@ pop_df = pd.read_sql_table("population", engine)
 perm_df = pd.read_sql_table("res_construction_permits", engine)
 emp_df = pd.read_sql_table("unemployment", engine)
 county_df = pd.read_sql_table("us_counties", engine)
-```
-
-## Create Table for models
-
-### Helper Functions
-
-```{python}
+#
+#
+#
+#
+#
+#
+#
 def combine_dfs(base_df, dfs_to_join):
     out_df = base_df.copy()
 
@@ -83,9 +85,9 @@ def combine_dfs(base_df, dfs_to_join):
     print("Missing Summary: \n", missing_summary_table)
 
     return out_df
-```
-
-```{python}
+#
+#
+#
 # slice df to specific year
 def return_specific_year(df, year):
     assert"year" in df.columns, "data frame does not have a year column"
@@ -93,19 +95,19 @@ def return_specific_year(df, year):
     sliced_df = df[df["year"]==year]
     sliced_df = sliced_df.drop(columns = ["year"])
     return sliced_df
-```
-
-```{python}
+#
+#
+#
 # keep only 2022 (closest to when we know data center counts to be true)
 
 df_with_years = [air_df, bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df]
 
 dfs_only_2022 = [return_specific_year(x, 2022) for x in df_with_years]
 
-```
-
-
-```{python}
+#
+#
+#
+#
 # Aggregate all industry codes per county into one summed row
 
 dfs_only_2022[1] = dfs_only_2022[1].groupby(
@@ -114,23 +116,20 @@ dfs_only_2022[1] = dfs_only_2022[1].groupby(
     ).sum()
 
 dfs_only_2022[1] = dfs_only_2022[1].drop(columns = ["naics_industry_code"])
-```
-
-```{python}
+#
+#
+#
 # Add column to county_df which indicates the presence of one or more data centers in a county
 counties_with_dc = dc_df["county_id"].unique()
 
 county_df["has_datacenter"] = county_df["county_id"].isin(counties_with_dc).astype(int)
-county_df = county_df[["county_id", "has_datacenter"]]
-```
-
-```{python}
+county_df = county_df.drop(columns!=["county_id, has_datacenter"])
+#
+#
+#
 # combine all data together
+
 combined_df = combine_dfs(county_df, dfs_only_2022)
-```
-
-## Check Model Assumptions
-
-```{python}
-
-```
+#
+#
+#
