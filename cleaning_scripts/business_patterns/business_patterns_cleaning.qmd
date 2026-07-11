@@ -311,3 +311,82 @@ df_final.to_sql(
     index=False
 )
 ```
+
+
+### Create NAICS codes look up table 
+
+Using 2022 codes (latest version as writing)
+https://www.census.gov/naics/?58967?yearbck=2022
+
+```{python}
+
+naics_lookup = {
+    "sector": [
+        "11",
+        "21",
+        "22",
+        "23",
+        "31",
+        "32",
+        "33",
+        "42",
+        "44",
+        "45",
+        "48",
+        "49",
+        "51",
+        "52",
+        "53",
+        "54",
+        "55",
+        "56",
+        "61",
+        "62",
+        "71",
+        "72",
+        "81",
+        "92",
+        "95",
+        "99"
+    ],
+    "definition": [
+        "Agriculture, Forestry, Fishing and Hunting",
+        "Mining, Quarrying, and Oil and Gas Extraction",
+        "Utilities",
+        "Construction",
+        "Manufacturing",
+        "Manufacturing",
+        "Manufacturing",
+        "Wholesale Trade",
+        "Retail Trade",
+        "Retail Trade",
+        "Transportation and Warehousing",
+        "Transportation and Warehousing",
+        "Information",
+        "Finance and Insurance",
+        "Real Estate and Rental and Leasing",
+        "Professional, Scientific, and Technical Services",
+        "Management of Companies and Enterprises",
+        "Administrative and Support and Waste Management and Remediation Services",
+        "Educational Services",
+        "Health Care and Social Assistance",
+        "Arts, Entertainment, and Recreation",
+        "Accommodation and Food Services",
+        "Other Services (except Public Administration)",
+        "Public Administration",
+        "Unknown",
+        "Unknown"
+    ],
+}
+
+
+naics_lookup = pd.DataFrame(naics_lookup)
+
+naics_lookup.to_sql(
+    "naics_code_look_up",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+```
