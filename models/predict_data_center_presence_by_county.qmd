@@ -33,6 +33,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.preprocessing import OneHotEncoder
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -134,7 +135,27 @@ dfs_only_2022[1] = dfs_only_2022[1].drop(columns = ["naics_industry_code"])
 counties_with_dc = dc_df["county_id"].unique()
 
 county_df["has_datacenter"] = county_df["county_id"].isin(counties_with_dc).astype(int)
-county_df = county_df[["county_id", "has_datacenter"]]
+county_df = county_df[[
+    #"state",
+    "county_id",
+    "has_datacenter"
+    ]]
+```
+
+```{python}
+# one-hot-encode state to act as a regional indicator variable 
+
+# encoder = OneHotEncoder(sparse_output=False)
+# encoded_states = encoder.fit_transform(county_df[["state"]])
+# encoded_df = pd.DataFrame(
+#     encoded_states,
+#     columns=encoder.get_feature_names_out(["state"])
+# )
+
+# county_df = pd.concat(
+#     [county_df.drop(columns=["state"]), encoded_df],
+#     axis=1
+# )
 ```
 
 ```{python}
@@ -206,21 +227,6 @@ plt.title("Correlation Matrix Heatmap")
 plt.show()
 ```
 
-
-```{python}
-# Check VIF
-X = independent_x_vars_df.select_dtypes(include=['number']) 
-X = X.dropna()
-
-vif_data = pd.DataFrame()
-vif_data["feature"] = X.columns
-vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
-
-
-print(vif_data[vif_data["VIF"] > 5])
-```
-
-
 ```{python}
 # drop columns with high VIF
 independent_x_vars_df = independent_x_vars_df.drop(columns = [
@@ -238,6 +244,21 @@ independent_x_vars_df = independent_x_vars_df.drop(columns = [
        'est2500_5000_per_capita', 'est>5000_per_capita'
     ])
 ```
+
+```{python}
+# Check VIF
+X = independent_x_vars_df.select_dtypes(include=['number']) 
+X = X.dropna()
+
+vif_data = pd.DataFrame()
+vif_data["feature"] = X.columns
+vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
+
+
+print(vif_data[vif_data["VIF"] > 5])
+```
+
+
 
 ## Models
 
