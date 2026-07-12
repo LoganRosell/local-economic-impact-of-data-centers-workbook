@@ -102,6 +102,7 @@ SELECT
     (SELECT COUNT(DISTINCT county_id) FROM res_construction_permits) AS permit_counties,
     (SELECT COUNT(DISTINCT county_id) FROM unemployment) AS unemployment_counties;
 
+
 -- return only counties found in all tables except for the data_centers table
 SELECT DISTINCT 
     county_id,
@@ -240,10 +241,103 @@ SELECT
   (SELECT MIN(year) FROM unemployment) AS unemployment_min_year;
 
 
+-- ================================================
+
+-- Check for county_ids which appear in air_quality but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM air_quality
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM air_quality
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
+
+-- Check for county_ids which appear in business_patterns but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM business_patterns
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM business_patterns
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
+
+
+-- Check for county_ids which appear in data_centers but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM data_centers
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM data_centers
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
 
 
 
+-- Check for county_ids which appear in gdp but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM gdp
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM gdp
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
 
+-- Check for county_ids which appear in personal_income but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM personal_income
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM personal_income
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
 
+-- Check for county_ids which appear in population but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM population
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM population
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
 
+-- Check for county_ids which appear in res_construction_permits but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM res_construction_permits
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM res_construction_permits
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
 
+-- Check for county_ids which appear in unemployment but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM unemployment
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM unemployment
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
