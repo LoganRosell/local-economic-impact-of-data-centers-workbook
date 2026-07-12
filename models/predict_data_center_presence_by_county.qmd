@@ -458,6 +458,7 @@ model_accuracy_report(rf_model, X_train_sm, y_train_sm, X_test_scaled, y_test)
 
 
 #### Balanced Random Forest Model without SMOTE
+Using the balanced Random Forest Classifier acheives similar overall accuracy as the standard Random Forest Classifier, but yields a doubleing of true postive rate.
 ```{python}
 brf_model = BalancedRandomForestClassifier(
     n_estimators=100, 
@@ -470,4 +471,23 @@ brf_model.fit(X_train_scaled, y_train)
 print("Balanced Random Forest")
 model_accuracy_report(brf_model, X_train_scaled, y_train, X_test_scaled, y_test)
 
+```
+
+
+```{python}
+# plot feature importance values for each x variable in the Balanced Random Forest Model
+feature_importances = brf_model.feature_importances_
+feature_names = X_train.columns 
+
+df_importance = pd.DataFrame({
+    'Feature': feature_names,
+    'Importance': feature_importances
+}).sort_values(by='Importance', ascending=True) 
+
+plt.figure(figsize=(10, 6))
+plt.barh(df_importance['Feature'], df_importance['Importance'], color='steelblue')
+plt.xlabel('Feature Importance')
+plt.title('Feature Importance in Balanced Random Forest Classifier')
+plt.tight_layout()
+plt.show()
 ```
