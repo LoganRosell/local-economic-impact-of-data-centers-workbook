@@ -34,6 +34,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import ConfusionMatrixDisplay
 from sklearn.preprocessing import OneHotEncoder
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -220,6 +222,45 @@ for i in feature_list:
     plt.show()
 
  ```
+
+
+Check for statistically significantly different means between counties with and without data centers using the Mann-Whitney U Test. Because checking 40 different features at the same time increases the risk of finding a fase-positive we are using the Benjamini-Hochberg correction. 
+```{python}
+# Check for statistically significantly different means between counties with and without data centers using the Mann-Whitney U Test
+
+dc_group = mega_df[mega_df["has_datacenter"] == 1]
+non_dc_group = mega_df[mega_df["has_datacenter"] == 0]
+
+# all numeric columns
+features = list(mega_df.columns)[2:]
+
+results = []
+
+for col in features:
+    g1 = dc_group[col].dropna()
+    g2 = non_dc_group[col].dropna()
+    
+    median_dc = g1.median()
+    median_non_dc = g2.median()
+    
+    stat, p_val = stats.mannwhitneyu(g1, g2, alternative="two-sided")
+    
+    results.append({
+        "feature": col,
+        "median_with_dc": median_dc,
+        "median_no_dc": median_non_dc,
+        "p_value": p_val
+    })
+
+results_df = pd.DataFrame(results)
+
+# Benjamini-Hochberg FDR correction
+reject, p_corrected, _, _ = multipletests(results_df["p_value"], alpha=0.05, method="fdr_bh")
+
+results_df["p_adjusted"] = p_corrected
+results_df["is_significant"] = reject
+results_df = results_df.sort_values(by="p_adjusted")
+```
 
 ## Check Model Assumptions
 
