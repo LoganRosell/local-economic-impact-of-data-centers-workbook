@@ -30,12 +30,14 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 import statsmodels.api as sm
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import ConfusionMatrixDisplay
 from sklearn.preprocessing import OneHotEncoder
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.stattools import durbin_watson
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -372,9 +374,7 @@ y_pred_train = log_reg.predict(X_train_scaled)
 train_acc = sum(y_pred_train == y_train) / len(y_train)
 print(f"Training Accuracy: {train_acc:.4f}")
 
-
 y_pred_test = log_reg.predict(X_test_scaled)
-
 
 ConfusionMatrixDisplay(
     confusion_matrix=confusion_matrix(y_test, y_pred_test), 
@@ -403,8 +403,6 @@ print(coef_df)
 A Durbin-Watson score = 2 indicates perfect independence of the residuals (assumption of Logistic Regression). A score < 2 indicates postive autocorrelation and a score > 2 indicates negative autocorreclation. 
 ```{python}
 # Check for independce of errors
-from statsmodels.stats.stattools import durbin_watson
-
 pred_probabilities = log_reg.predict_proba(X)[:, 1]
 
 residuals = y - pred_probabilities
@@ -413,3 +411,27 @@ dw_stat = durbin_watson(residuals)
 print("Durbin-Watson:", dw_stat)
 ```
 
+
+
+### Random Forest
+
+```{python}
+rf_model = RandomForestClassifier(class_weight = "balanced")
+rf_model.fit(X_train_scaled, y_train)
+```
+
+```{python}
+# evaluate model performance
+y_pred_train = rf_model.predict(X_train_scaled)
+train_acc = sum(y_pred_train == y_train) / len(y_train)
+print(f"Training Accuracy: {train_acc:.4f}")
+
+y_pred_test = rf_model.predict(X_test_scaled)
+
+ConfusionMatrixDisplay(
+    confusion_matrix=confusion_matrix(y_test, y_pred_test), 
+    display_labels=rf_model.classes_
+).plot()
+
+plt.show()
+```
