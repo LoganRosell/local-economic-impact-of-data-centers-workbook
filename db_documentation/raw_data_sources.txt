@@ -23,3 +23,5 @@ Unemployment2023.csv : https://www.ers.usda.gov/data-products/county-level-data-
 water_data : https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily
 
 2022 NAICS: https://www.census.gov/naics/?58967?yearbck=2022
+
+census_gazatteer_2025_county_sizes.txt: https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html

@@ -18,6 +18,7 @@ load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
 csv_path = data_dir / "county_fips_codes" / "county_2020_fips_codes.csv"
 centroids_path = data_dir / "county_fips_codes" / "US_Counties_Centroids.csv"
+physical_areas_path = data_dir / "county_fips_codes" / "census_gazetteer_2025_county_sizes.txt"
 ```
 
 
@@ -34,6 +35,14 @@ df_raw = pd.read_csv(
 centroids_df = pd.read_csv(
     centroids_path,
     dtype={"FIPS_CD": str}
+)
+```
+
+```{python}
+physical_areas_df = pd.read_csv(
+    physical_areas_path,
+    delimiter="|", 
+    dtype={"GEOID": str}
 )
 ```
 
@@ -117,6 +126,14 @@ df_final.describe(include=[object])
 centroid_missing = df_final[df_final[["centroid_lon", "centroid_lat"]].isna().any(axis = 1)]
 centroid_missing
 # Looks like these are all non-mainland counties so we should be good
+```
+
+Connetticut counties are missing due to change in FIPS codes, need to come back and fix this later. 
+```{python}
+# add in county land and water area measures
+physical_areas_df = physical_areas_df[["GEOID", "ALAND_SQMI", "AWATER_SQMI"]]
+physical_areas_df.columns = ["county_id", "land_area_sqmi", "water_area_sqmi"]
+df_final = pd.merge(left=df_final, right=physical_areas_df, on="county_id", how="left")
 ```
 
 ```{python}
