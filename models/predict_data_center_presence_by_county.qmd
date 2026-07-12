@@ -38,6 +38,8 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.stattools import durbin_watson
+from imblearn.over_sampling import SMOTE
+from imblearn.ensemble import BalancedRandomForestClassifier
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -336,8 +338,7 @@ print(vif_data[vif_data["VIF"] > 5])
 
 ## Models
 
-### Logistic Regression
-
+### Set Up Training and Testing Data
 ```{python}
 # set up train and test datasets
 independent_x_vars_df = independent_x_vars_df.dropna()
@@ -345,10 +346,8 @@ independent_x_vars_df = independent_x_vars_df.dropna()
 y = independent_x_vars_df["has_datacenter"]
 X = independent_x_vars_df.drop(columns = ["county_id", "has_datacenter"])
 
-
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=57, stratify=y)
 ```
-
 
 ```{python}
 # scale features since they have very different ranges
@@ -358,21 +357,50 @@ X_train_scaled = scaler.fit_transform(X_train.values)
 X_test_scaled = scaler.transform(X_test.values)
 ```
 
+```{python}
+smote = SMOTE(sampling_strategy='minority', random_state=57)
+X_train_sm, y_train_sm = smote.fit_resample(X_train_scaled, y_train)
+```
+
+```{python}
+# function to return model accuracy report
+def model_accuracy_report(X_train, y_train, X_test, y_test):
+    # training calculations
+    y_pred_train = log_reg.predict(X_train)
+    train_acc = sum(y_pred_train == y_train) / len(y_train)
+    print(f"Overall Training Accuracy: {train_acc:.4f}")
+    
+    actual_pos_train = (y_train == 1)
+    true_pos_train = (y_pred_train == 1) & actual_pos_train
+    tpr_train = sum(true_pos_train) / sum(actual_pos_train)
+    print(f"True Positive Training Accuracy: {tpr_train:.4f}")
+    
+    print("-" * 20) 
+    
+    # test calculations
+    y_pred_test = log_reg.predict(X_test)
+    test_acc = sum(y_pred_test == y_test) / len(y_test)
+    print(f"Overall Test Accuracy: {test_acc:.4f}")
+    
+    actual_pos_test = (y_test == 1)
+    true_pos_test = (y_pred_test == 1) & actual_pos_test
+    tpr_test = sum(true_pos_test) / sum(actual_pos_test)
+    print(f"True Positive Test Accuracy: {tpr_test:.4f}")
+```
+
+### Logistic Regression
 
 Using class_weight='balanced' since the vast majority of counties do not have a datacenter meaning that if we don't balance the training data it model will tend to just guess that all counties don't have a data center.
 ```{python}
 # train the model
 log_reg = LogisticRegression(random_state=57, class_weight='balanced')
-log_reg.fit(X_train_scaled, y_train)
+log_reg.fit(X_train_sm, y_train_sm)
 ```
-
 
 ```{python}
 # evaluate model performance
-
-y_pred_train = log_reg.predict(X_train_scaled)
-train_acc = sum(y_pred_train == y_train) / len(y_train)
-print(f"Training Accuracy: {train_acc:.4f}")
+print("Logistic Regression")
+model_accuracy_report(X_train_sm, y_train_sm, X_test_scaled, y_test)
 
 y_pred_test = log_reg.predict(X_test_scaled)
 
@@ -415,22 +443,45 @@ print("Durbin-Watson:", dw_stat)
 
 ### Random Forest
 
+#### Standard Random Forest Model with SMOTE to balance classes
+
 ```{python}
-rf_model = RandomForestClassifier(class_weight = "balanced")
-rf_model.fit(X_train_scaled, y_train)
+rf_model = RandomForestClassifier()
+rf_model.fit(X_train_sm, y_train_sm)
 ```
 
 ```{python}
 # evaluate model performance
-y_pred_train = rf_model.predict(X_train_scaled)
-train_acc = sum(y_pred_train == y_train) / len(y_train)
-print(f"Training Accuracy: {train_acc:.4f}")
+print("Random Forest")
+model_accuracy_report(X_train_sm, y_train_sm, X_test_scaled, y_test)
 
 y_pred_test = rf_model.predict(X_test_scaled)
 
 ConfusionMatrixDisplay(
     confusion_matrix=confusion_matrix(y_test, y_pred_test), 
     display_labels=rf_model.classes_
+).plot()
+
+plt.show()
+```
+
+
+#### Balanced Random Forest Model without SMOTE
+```{python}
+brf_model = BalancedRandomForestClassifier(
+    n_estimators=100, 
+    sampling_strategy="all", 
+    replacement=True, 
+    random_state=57
+)
+
+brf_model.fit(X_train_scaled, y_train)
+
+y_pred_test = brf_model.predict(X_test_scaled)
+
+ConfusionMatrixDisplay(
+    confusion_matrix=confusion_matrix(y_test, y_pred_test), 
+    display_labels=brf_model.classes_
 ).plot()
 
 plt.show()
