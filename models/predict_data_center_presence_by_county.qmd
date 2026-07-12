@@ -189,6 +189,38 @@ per_capita_cols = [
 mega_df = make_per_capita(mega_df, per_capita_cols)
 ```
 
+## EDA
+ 
+ ```{python}
+# compare the mean value for all features between counties with and without datacenters
+dc_counties =  mega_df[mega_df["has_datacenter"]==1]
+dc_counties = dc_counties.drop(columns = ["county_id", "has_datacenter"])
+dc_county_means = dc_counties.mean().to_frame()
+dc_county_means["has_dc"] = "no"
+dc_county_means.columns = ["mean", "has_dc"]
+
+non_dc_counties =  mega_df[mega_df["has_datacenter"]==0]
+non_dc_counties = non_dc_counties.drop(columns = ["county_id", "has_datacenter"])
+non_dc_county_means = non_dc_counties.mean().to_frame()
+non_dc_county_means["has_dc"] = "yes"
+non_dc_county_means.columns = ["mean", "has_dc"]
+
+comparing_means_df = pd.concat([dc_county_means, non_dc_county_means], axis=0)
+comparing_means_df = comparing_means_df.reset_index().rename(columns={"index": "feature"})
+
+feature_list = comparing_means_df["feature"].unique()
+
+for i in feature_list:
+    sns.barplot(
+        x = "feature",
+        y = "mean",
+        hue = "has_dc",
+        data = comparing_means_df[comparing_means_df["feature"]==i]
+    )
+    plt.show()
+
+ ```
+
 ## Check Model Assumptions
 
 ```{python}
@@ -257,7 +289,6 @@ vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.c
 
 print(vif_data[vif_data["VIF"] > 5])
 ```
-
 
 
 ## Models
@@ -340,3 +371,4 @@ residuals = y - pred_probabilities
 dw_stat = durbin_watson(residuals)
 print("Durbin-Watson:", dw_stat)
 ```
+
