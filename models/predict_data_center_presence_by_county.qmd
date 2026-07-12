@@ -195,6 +195,11 @@ per_capita_cols = [
 mega_df = make_per_capita(mega_df, per_capita_cols)
 ```
 
+```{python}
+# remove all rows with NA values in preparating of statitical tests which fail on NA values. 
+mega_df = mega_df.dropna()
+```
+
 ## EDA
  
  ```{python}
@@ -325,7 +330,6 @@ independent_x_vars_df = independent_x_vars_df.drop(columns = [
 ```{python}
 # Check VIF
 X = independent_x_vars_df.select_dtypes(include=['number']) 
-X = X.dropna()
 
 vif_data = pd.DataFrame()
 vif_data["feature"] = X.columns
@@ -341,8 +345,6 @@ print(vif_data[vif_data["VIF"] > 5])
 ### Set Up Training and Testing Data
 ```{python}
 # set up train and test datasets
-independent_x_vars_df = independent_x_vars_df.dropna()
-
 y = independent_x_vars_df["has_datacenter"]
 X = independent_x_vars_df.drop(columns = ["county_id", "has_datacenter"])
 
@@ -443,7 +445,6 @@ print("Durbin-Watson:", dw_stat)
 ### Random Forest
 
 #### Standard Random Forest Model with SMOTE to balance classes
-
 ```{python}
 rf_model = RandomForestClassifier()
 rf_model.fit(X_train_sm, y_train_sm)
@@ -470,9 +471,7 @@ brf_model.fit(X_train_scaled, y_train)
 
 print("Balanced Random Forest")
 model_accuracy_report(brf_model, X_train_scaled, y_train, X_test_scaled, y_test)
-
 ```
-
 
 ```{python}
 # plot feature importance values for each x variable in the Balanced Random Forest Model
@@ -488,6 +487,53 @@ plt.figure(figsize=(10, 6))
 plt.barh(df_importance['Feature'], df_importance['Importance'], color='steelblue')
 plt.xlabel('Feature Importance')
 plt.title('Feature Importance in Balanced Random Forest Classifier')
+plt.tight_layout()
+plt.show()
+```
+
+
+#### Balanced Random Forest Model Trained on All Features
+This model performs slightly worse on both overall accuracy and the accuracy of predicting counties with datacenters than the previous model which uses fewer features.
+```{python}
+# set up train and test datasets
+y = mega_df["has_datacenter"]
+X_full = mega_df.drop(columns = ["county_id", "has_datacenter"])
+
+X_train_full, X_test_full, y_train, y_test = train_test_split(X_full, y, test_size=0.2, random_state=57, stratify=y)
+
+# scale features since they have very different ranges
+scaler = StandardScaler()
+X_train_scaled_full = scaler.fit_transform(X_train_full.values)
+X_test_scaled_full = scaler.transform(X_test_full.values)
+```
+
+```{python}
+brf_full_model = BalancedRandomForestClassifier(
+    n_estimators=100, 
+    sampling_strategy="all", 
+    replacement=True, 
+    random_state=57
+)
+brf_full_model.fit(X_train_scaled_full, y_train)
+
+print("Balanced Random Forest")
+model_accuracy_report(brf_full_model, X_train_scaled_full, y_train, X_test_scaled_full, y_test)
+```
+
+```{python}
+# plot feature importance values for each x variable in the Balanced Random Forest Model with all x variables
+feature_importances = brf_full_model.feature_importances_
+feature_names = X_train_full.columns 
+
+df_importance = pd.DataFrame({
+    'Feature': feature_names,
+    'Importance': feature_importances
+}).sort_values(by='Importance', ascending=True) 
+
+plt.figure(figsize=(10, 6))
+plt.barh(df_importance['Feature'], df_importance['Importance'], color='steelblue')
+plt.xlabel('Feature Importance')
+plt.title('Feature Importance in Balanced Random Forest Classifier Full')
 plt.tight_layout()
 plt.show()
 ```
