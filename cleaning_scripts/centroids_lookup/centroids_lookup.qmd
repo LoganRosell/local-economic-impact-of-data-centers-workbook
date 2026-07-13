@@ -11,6 +11,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from haversine import haversine, Unit
 
 load_dotenv()
 ```
@@ -26,3 +27,31 @@ engine = create_engine(database_url)
 dc_df = pd.read_sql_table("data_centers", engine)
 county_df = pd.read_sql_table("us_counties", engine)
 ```
+
+## Prepare Dataframes for merging
+
+```{python}
+dc_lookup = dc_df[["data_center_id", "lon", "lat"]].copy()
+county_lookup = county_df[["county_id", "centroid_lon", "centroid_lat"]].copy()
+```
+
+## Cross-Join Dataframes
+
+```{python}
+lookup_df = county_lookup.merge(dc_lookup, how="cross")
+```
+
+## Calculate Haversine Distance
+
+```{python}
+lookup_df["distance_miles"] = lookup_df.apply(
+    lambda row: haversine(
+        (row["centroid_lat"], row["centroid_lon"]),
+        (row["lat"], row["lon"]),
+        unit = Unit.MILES
+    ),
+    axis = 1
+)
+```
+
+
