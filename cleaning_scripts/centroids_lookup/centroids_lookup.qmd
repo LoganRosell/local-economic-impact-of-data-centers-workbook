@@ -54,4 +54,18 @@ lookup_df["distance_miles"] = lookup_df.apply(
 )
 ```
 
+## Update County table to use closest data center distance
+
+```{python}
+nearest_dc_idx = lookup_df.groupby("county_id")["distance_miles"].idxmin()
+
+nearest_dc = lookup_df.loc[
+    nearest_dc_idx,
+    ["county_id", "data_center_id", "distance_miles"]
+    ].rename(columns = {"distance_miles": "min_distance_to_dc_mi", "data_center_id": "nearest_dc_id"})
+```
+
+```{python}
+final_county_df = county_df.copy().merge(nearest_dc, on = "county_id", how = "left")
+```
 
