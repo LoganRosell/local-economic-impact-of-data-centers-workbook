@@ -148,6 +148,15 @@ df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
 ```
 
 ```{python}
+# Find year-over-year change 
+df_final = df_final.sort_values(["county_id", "year"]).reset_index(drop=True)
+yoy_cols = [col for col in df_final.columns if col not in ["year", "county_id"]]
+
+for col in yoy_cols:
+    df_final[f"{col}_yoy_change"] = df_final.groupby("county_id")[col].pct_change(fill_method=None)
+```
+
+```{python}
 # setup connection variables to local sql db
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
