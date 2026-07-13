@@ -193,6 +193,11 @@ final_df = final_df.drop(columns=per_capita_cols)
 ```
 
 ```{python}
+# Put business size columns in a list together since they should always be used together
+county_size_cols = ["est<5_per_capita", "est5_9_per_capita", "est10_19_per_capita", "est20_49_per_capita", "est50_99_per_capita", "est100_249_per_capita", "est250_499_per_capita", "est500_999_per_capita", "est1000_1500_per_capita", "est1500_2500_per_capita", "est2500_5000_per_capita", "est>5000_per_capita"]
+```
+
+```{python}
 # Rename for clarity
 final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
 ```
