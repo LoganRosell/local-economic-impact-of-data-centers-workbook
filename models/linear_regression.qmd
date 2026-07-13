@@ -193,6 +193,11 @@ final_df = final_df.drop(columns=per_capita_cols)
 ```
 
 ```{python}
+# Put business size columns in a list together since they should always be used together
+business_size_cols = ["est<5_per_capita", "est5_9_per_capita", "est10_19_per_capita", "est20_49_per_capita", "est50_99_per_capita", "est100_249_per_capita", "est250_499_per_capita", "est500_999_per_capita", "est1000_1500_per_capita", "est1500_2500_per_capita", "est2500_5000_per_capita", "est>5000_per_capita"]
+```
+
+```{python}
 # Rename for clarity
 final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
 ```
@@ -253,55 +258,55 @@ def run_linear_regression(df, y_col, x_cols):
 #### Air Quality
 
 ```{python}
-run_linear_regression(final_df, "pm25_mean_daily_avg", ["data_center_count", "population", "tot_establishment_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita", "all_permits_per_capita"])
+run_linear_regression(final_df, "pm25_mean_daily_avg", ["data_center_count", "population", "real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita", "all_permits_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
 ```
 
 Air Quality Analysis: 
 
-* Overall Adj. R-squared of the model is 0.243
+* Overall Adj. R-squared of the model is 0.349
 * Data centers have a high p-value and thus are not statistically significant in this model
-* The residuals are not closely centered on 0, and seem to form a vertical band towards the middle of the x-axis, indicating heteroskedasticity. Additioanlly, there are several major outliers.
+* The residuals are not closely centered on 0, and seem to form a vertical band towards the middle of the x-axis, indicating heteroskedasticity. Additionally, there are several major outliers.
 * The Q-Q plot indicates approximate normality in the center, but there are some departures from normality towards the tails
-* All VIFs are very low, indicating that multicollinearity is not a concern here.
+* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
 
 #### GDP Index
 
 ```{python}
-run_linear_regression(final_df, "quantity_index_gdp", ["data_center_count", "population", "unemployment_rate", "tot_employee_count_per_capita", "personal_income_thousands_of_dollars_per_capita", "tot_establishment_count_per_capita"])
+run_linear_regression(final_df, "quantity_index_gdp", ["data_center_count", "population", "unemployment_rate", "tot_employee_count_per_capita", "personal_income_thousands_of_dollars_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
 ```
 
 GDP Index Analysis:
 
-* Overall Adj. R-squared of the model is 0.084
+* Overall Adj. R-squared of the model is 0.045
 * Data centers have a high p-value and thus are not statistically significant in this model
 * Residuals are densely clustered around a single point indicating heteroskedasticity, and there are very high outliers
 * The Q-Q plot shows strong departures from normality
-* All VIFs are very low, so there is not high multicollinearity
+* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
 
 
 #### Unemployment Rate
 
 ```{python}
-run_linear_regression(final_df, "unemployment_rate", ["data_center_count", "population", "personal_income_thousands_of_dollars_per_capita", "tot_establishment_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita"])
+run_linear_regression(final_df, "unemployment_rate", ["data_center_count", "population", "personal_income_thousands_of_dollars_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
 ```
 
 Unemployment Rate Analysis:
 
-* Overall Adj. R-squared of the model is 0.261
+* Overall Adj. R-squared of the model is 0.179
 * Data centers have a high p-value and thus are not statistically significant in this model
 * Residuals form a V-shaped pattern indicating heteroskedasticity, and there are very high outliers
 * The Q-Q plot shows strong departures from normality on the top quantile
-* All VIFs are very low, so there is not high multicollinearity
+* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
 
 #### Establishment Count Per Capita
 
 ```{python}
-run_linear_regression(final_df, "tot_establishment_count_per_capita", ["data_center_count", "population", "tot_employee_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita"])
+run_linear_regression(final_df, "tot_establishment_count_per_capita", ["data_center_count", "population", "tot_employee_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita", "land_area_sqmi", "water_area_sqmi"])
 ```
 
 Establishment Analysis:
 
-* Overall Adj. R-squared of the model is 0.241
+* Overall Adj. R-squared of the model is 0.375
 * Data centers have a high p-value and thus are not statistically significant in this model
 * Residuals form a clustered shape around the middle indicating heteroskedasticity, and there are very high outliers
 * The Q-Q plot shows strong departures from normality on both ends
@@ -310,13 +315,13 @@ Establishment Analysis:
 #### Residential Construction Permits
 
 ```{python}
-run_linear_regression(final_df, "all_permits_per_capita", ["data_center_count", "population", "pm25_mean_daily_avg", "unemployment_rate", "tot_employee_count_per_capita", "tot_establishment_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita"])
+run_linear_regression(final_df, "all_permits_per_capita", ["data_center_count", "population", "pm25_mean_daily_avg", "unemployment_rate","real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
 ```
 
 Establishment Analysis:
 
-* Overall Adj. R-squared of the model is 0.108
-* Data centers have a p-value of 0.003 and thus **are** statistically signficant at the 0.01 level
+* Overall Adj. R-squared of the model is 0.126
+* Data centers have a p-value of 0.119 and thus are not statistically significant at the 0.05 level
 * Residuals form a clustered wedge shape indicating heteroskedasticity, and there are some large outliers
 * The Q-Q plot shows strong departures from normality on the upper tail, but is relatively normally distributed towards the bottom and middle
-* All VIFs are very low, so there is not high multicollinearity
+* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
