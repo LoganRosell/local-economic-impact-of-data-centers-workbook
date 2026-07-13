@@ -69,3 +69,27 @@ nearest_dc = lookup_df.loc[
 final_county_df = county_df.copy().merge(nearest_dc, on = "county_id", how = "left")
 ```
 
+## Update Database
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+lookup_df.to_sql(
+    "dc_county_lookup",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+final_county_df.to_sql(
+    "us_counties",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
+
