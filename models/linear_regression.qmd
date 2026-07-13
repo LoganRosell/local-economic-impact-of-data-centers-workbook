@@ -103,6 +103,15 @@ def combine_dfs(base_df, dfs_to_join):
     return out_df
 ```
 
+```{python}
+def return_specific_year(df, year):
+    assert"year" in df.columns, "data frame does not have a year column"
+    year = int(year)
+    sliced_df = df[df["year"]==year]
+    sliced_df = sliced_df.drop(columns = ["year"])
+    return sliced_df
+```
+
 ### Create final table
 
 ```{python}
@@ -110,14 +119,26 @@ grouped_bus_df = bus_df.groupby(["county_id", "year"], as_index = False).sum(num
 ```
 
 ```{python}
-# Average all necessary dfs by county
-final_air_df = county_average(air_df, include_cols = ["pm25_mean_daily_avg"])
-final_bus_df = county_average(grouped_bus_df, include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
-final_gdp_df = county_average(gdp_df, include_cols = ["real_gdp_2017_dollars_thousands", "quantity_index_gdp"])
-final_inc_df = county_average(inc_df, include_cols = ["personal_income_thousands_of_dollars"])
-final_pop_df = county_average(pop_df, include_cols = ["population"])
-final_perm_df = county_average(perm_df, include_cols = ["all_permits", "single_family_permits", "all_multifamily_permits"])
-final_emp_df = county_average(emp_df, include_cols = ["unemployment_rate"])
+# Take 2022 of each county
+final_air_df = return_specific_year(air_df, 2022)
+final_bus_df = return_specific_year(grouped_bus_df, 2022)
+final_gdp_df = return_specific_year(gdp_df, 2022)
+final_inc_df = return_specific_year(inc_df, 2022)
+final_pop_df = return_specific_year(pop_df, 2022)
+final_perm_df = return_specific_year(perm_df, 2022)
+final_emp_df = return_specific_year(emp_df, 2022)
+```
+
+If need average again later (not currently in use):
+```{python}
+# # Average all necessary dfs by county
+# final_air_df = county_average(air_df, include_cols = ["pm25_mean_daily_avg"])
+# final_bus_df = county_average(grouped_bus_df, include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
+# final_gdp_df = county_average(gdp_df, include_cols = ["real_gdp_2017_dollars_thousands", "quantity_index_gdp"])
+# final_inc_df = county_average(inc_df, include_cols = ["personal_income_thousands_of_dollars"])
+# final_pop_df = county_average(pop_df, include_cols = ["population"])
+# final_perm_df = county_average(perm_df, include_cols = ["all_permits", "single_family_permits", "all_multifamily_permits"])
+# final_emp_df = county_average(emp_df, include_cols = ["unemployment_rate"])
 ```
 
 ```{python}
@@ -130,7 +151,7 @@ final_dc_df = (
 ```
 
 ```{python}
-final_df = combine_dfs(county_df["county_id"], [final_air_df, final_bus_df, final_gdp_df, final_inc_df, final_pop_df, final_perm_df, final_emp_df, final_dc_df])
+final_df = combine_dfs(county_df, [final_air_df, final_bus_df, final_gdp_df, final_inc_df, final_pop_df, final_perm_df, final_emp_df, final_dc_df])
 
 final_df["data_center_count"] = final_df["data_center_count"].fillna(0)
 
@@ -145,11 +166,24 @@ per_capita_cols = [
     "tot_employee_count",
     "annual_payroll",
     "tot_establishment_count",
+    "est<5",
+    "est5_9",
+    "est10_19",
+    "est20_49",
+    "est50_99",
+    "est100_249",
+    "est250_499",
+    "est500_999",
+    "est>1000",
+    "est1000_1500",
+    "est1500_2500",
+    "est2500_5000",
+    "est>5000",
     "real_gdp_2017_dollars_thousands",
     "personal_income_thousands_of_dollars",
     "all_permits",
     "single_family_permits",
-    "all_multifamily_permits",
+    "all_multifamily_permits"
 ]
 
 for col in per_capita_cols:
