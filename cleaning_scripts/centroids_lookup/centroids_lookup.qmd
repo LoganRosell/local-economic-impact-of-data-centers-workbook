@@ -3,3 +3,26 @@ title: "Centroids Lookup Table Creation Script"
 format: html
 ---
 
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+load_dotenv()
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+# Load required tables
+dc_df = pd.read_sql_table("data_centers", engine)
+county_df = pd.read_sql_table("us_counties", engine)
+```
