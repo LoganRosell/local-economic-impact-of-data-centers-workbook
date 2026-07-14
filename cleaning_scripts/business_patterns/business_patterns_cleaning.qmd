@@ -424,9 +424,9 @@ for y in np.arange(1,23):
     df_raw = load_data(csv_path)
     df_raw = lower_cols(df_raw)
     df_raw = remove_non_dc_employment_rows(df_raw)
-    df_raw = drop_non_industry_or_county_id_cols(df_raw)
+    #df_raw = drop_non_industry_or_county_id_cols(df_raw)
     df_raw = update_col_names(df_raw)
-    #df_raw = drop_extra_cols(df_raw)
+    df_raw = drop_extra_cols(df_raw)
     #df_raw = make_zero_na_according_to_emp_flag_fast(df_raw)
     df_raw = add_year(df_raw)
     #df_raw = trim_years(df_raw)
@@ -444,7 +444,7 @@ df_final_dc_emp = pd.concat(list_of_df, ignore_index=True)
 ```{python}
 # save data center employment data to SQL db
 df_final_dc_emp.to_sql(
-    "dc_employment",
+    "naics_518_data",
     con=engine,
     if_exists="replace",
     index=False
