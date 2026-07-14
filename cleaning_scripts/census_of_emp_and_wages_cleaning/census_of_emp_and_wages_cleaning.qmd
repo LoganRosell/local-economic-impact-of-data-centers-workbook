@@ -1,0 +1,136 @@
+```{python}
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+import duckdb
+
+load_dotenv()
+```
+
+```{python}
+def load_data(csv_path):
+    df = pd.read_csv(
+        csv_path,
+        dtype = {
+            "fipstate": str, 
+            "FIPSTATE": str,
+            "fipscty": str,
+            "FIPSCTY": str}
+    )
+    return df
+```
+
+while total_qtrly_wages and taxable_qtrly_wages looks like variables we would want, they are all zero at the county level for every year in our dataset due to privacy laws forcing the government to obsure that information. 
+```{python}
+
+def load_only_niacs_518_data(csv_path):
+    df = duckdb.query(f"""
+        SELECT
+            area_fips,
+            agglvl_code,
+            year,
+            qtr,
+            disclosure_code,
+            own_code,
+            size_code,
+            qtrly_estabs
+        FROM '{csv_path}' 
+        WHERE industry_code = '518'
+    """).df()
+    return df
+```
+
+```{python}
+# convert ownership codes to their title
+# dictionary built from values listed here: https://www.bls.gov/cew/classifications/ownerships/ownership-titles.htm
+own_code_dict = {
+    0: "Total Covered",
+    5: "Private",
+    4: "International Government",
+    3: "Local Government",
+    2: "State Government",
+    1: "Federal Government",
+    8: "Total Government",
+    9: "Total U.I. Covered (Excludes Federal Government)"
+    }
+
+def own_code_to_title(df):
+    df['own_code'] = df['own_code'].map(own_code_dict)
+    return df
+```
+
+```{python}
+# convert size codes to their title 
+# dictionary built from values listed here: https://www.bls.gov/cew/classifications/size/size-titles.htm
+size_codes_dict = {
+    0: "All establishment sizes",
+    1: "Fewer than 5 employees per establishment",
+    2: "5 to 9 employees per establishment",
+    3: "10 to 19 employees per establishment",
+    4: "20 to 49 employees per establishment",
+    5: "50 to 99 employees per establishment",
+    6: "100 to 249 employees per establishment",
+    7: "250 to 499 employees per establishment",
+    8: "500 to 999 employees per establishment",
+    9: "1000 or more employees per establishment"
+}
+
+def size_code_to_title(df):
+    df['size_code'] = df['size_code'].map(size_codes_dict)
+    return df
+```
+
+```{python}
+def combine_quarters(df):
+    df = df.groupby(by=["area_fips", "agglvl_code", "year", "disclosure_code", "own_code", "size_code"], as_index=False).max()
+    df = df.drop(columns=["qtr"])
+    return df
+```
+
+```{python}
+def filter_to_only_county_level_observations(df):
+    df = df[df["agglvl_code"]==75]
+    df = df.drop(columns = ["agglvl_code"])
+    return df
+```
+
+```{python}
+# main loop
+list_of_df = []
+
+for file_year in np.arange(2002,2023):
+
+    csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}.q1-q4.singlefile.csv"
+
+    df_raw = load_only_niacs_518_data(csv_path)
+    df_raw = own_code_to_title(df_raw)
+    df_raw = size_code_to_title(df_raw)
+    df_raw = combine_quarters(df_raw)
+    df_raw = filter_to_only_county_level_observations(df_raw)
+    df_raw.columns = ["county_id", "year",
+                        "disclosure_code", "own_code",
+                        "size_code", "estabs"]
+
+    list_of_df.append(df_raw)
+
+df_final = pd.concat(list_of_df, ignore_index=True)
+```
+
+```{python}
+data_dir = Path(os.environ["DATA_DIR"])
+engine = create_engine(database_url)
+```
+```{python}
+# export cleaned data to sql table in local db
+df_final.to_sql(
+    "census_of_emp_and_wages",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
