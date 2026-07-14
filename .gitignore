@@ -21,3 +21,9 @@ Thumbs.db
 
 # Specific folders
 shared_data/
+
+# Images
+*.png
+*.jpeg
+*.jpg
+*.gif
