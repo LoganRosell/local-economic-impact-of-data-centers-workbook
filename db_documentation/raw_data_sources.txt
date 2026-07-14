@@ -25,3 +25,6 @@ water_data : https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily
 2022 NAICS: https://www.census.gov/naics/?58967?yearbck=2022
 
 census_gazatteer_2025_county_sizes.txt: https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html
+
+Quarterly Census Employment and Wage data: https://www.bls.gov/cew/downloadable-data-files.htm
+Used the quarterly, single files csv files from 2002 to 2022
