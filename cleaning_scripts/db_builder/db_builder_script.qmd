@@ -42,5 +42,6 @@ try_to_run_file(cleaning_scripts_path / "personal_income_cleaning/personal_incom
 try_to_run_file(cleaning_scripts_path / "population_cleaning/population_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "res_construction_permits/res_construction_permits_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "unemployment_cleaning/unemployment_cleaning.qmd")
+try_to_run_file(cleaning_scripts_path / "census_of_emp_and_wages_cleaning/census_of_emp_and_wages_cleaning.qmd")
 
 ```
