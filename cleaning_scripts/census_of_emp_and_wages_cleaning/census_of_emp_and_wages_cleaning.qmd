@@ -99,11 +99,12 @@ def filter_to_only_county_level_observations(df):
     return df
 ```
 
+all estabs data is zero until the year 2004 for the NAICS code 518
 ```{python}
 # main loop
 list_of_df = []
 
-for file_year in np.arange(2002,2023):
+for file_year in np.arange(2004,2023):
 
     csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}.q1-q4.singlefile.csv"
 
