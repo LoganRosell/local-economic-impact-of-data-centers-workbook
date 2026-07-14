@@ -99,6 +99,13 @@ def filter_to_only_county_level_observations(df):
     return df
 ```
 
+```{python}
+# remove all fips codes which are non-county aggregations (those that end in 999)
+def remove_non_county_id_codes(df):
+    df = df[~df["county_id"].astype(str).str.contains(r"^\d{2}999")]
+    return df
+```
+
 all estabs data is zero until the year 2004 for the NAICS code 518
 ```{python}
 # main loop
@@ -116,6 +123,7 @@ for file_year in np.arange(2004,2023):
     df_raw.columns = ["county_id", "year",
                         "disclosure_code", "own_code",
                         "size_code", "estabs"]
+    df_raw = remove_non_county_id_codes(df_raw)
 
     list_of_df.append(df_raw)
 
