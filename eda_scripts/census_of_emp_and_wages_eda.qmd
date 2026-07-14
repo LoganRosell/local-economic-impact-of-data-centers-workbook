@@ -65,9 +65,53 @@ sns.pairplot(df[df["year"]==2022], corner=True)
 plt.show()
 ```
 
+### Data Consistency by Year
+
+```{python}
+# plot total data centers for the whole country over time
+national_total_by_year = df[["year", "estabs"]]
+national_total_by_year = national_total_by_year.groupby('year').sum()
+sns.lineplot(data=national_total_by_year, x="year", y="estabs")
+plt.show()
+```
+
+```{python}
+# plot total data centers by state over time
+state_tot_by_year = df[["year", "estabs", "county_id"]]
+state_tot_by_year["state_id"] = state_tot_by_year["county_id"].astype(str).str[:2]
+
+fips_to_state = {
+    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA",
+    "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
+    "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN",
+    "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME",
+    "24": "MD", "25": "MA", "26": "MI", "27": "MN", "28": "MS",
+    "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
+    "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND",
+    "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI",
+    "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT",
+    "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
+    "56": "WY"
+    }
+
+state_tot_by_year["state"] = state_tot_by_year["state_id"].map(fips_to_state)
+state_tot_by_year = state_tot_by_year[["year", "estabs", "state"]]
+state_tot_by_year = state_tot_by_year.groupby(by=['year', 'state']).sum()
+state_tot_by_year = state_tot_by_year.reset_index()
+
+top_states = state_tot_by_year.groupby("state").mean()
+top_states = top_states.sort_values(by=['estabs'], ascending=False)
+top_states = top_states.reset_index()
+top_states = top_states.loc[0:10,"state"]
+
+only_top_states_data = state_tot_by_year[state_tot_by_year["state"].isin(top_states.to_list())]
+
+sns.lineplot(data=only_top_states_data, x="year", y="estabs", hue='state')
+plt.show()
+```
+
 
 ### Geographic Distribution
-
 
 ```{python}
 # load counties map data
