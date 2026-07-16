@@ -120,7 +120,7 @@ list_of_df = []
 
 for file_year in np.arange(2004,2023):
 
-    csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}.q1-q4.singlefile.csv"
+    csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}_q1_q4_naics_518_data_only.csv"
 
     df_raw = duck_db_load_data(csv_path)
     df_raw = own_code_to_title(df_raw)
