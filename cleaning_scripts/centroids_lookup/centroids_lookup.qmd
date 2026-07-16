@@ -44,6 +44,9 @@ county_lookup_2 = county_lookup_2.rename(columns = {
 
 ```{python}
 lookup_df = county_lookup.merge(county_lookup_2, how="cross")
+
+# drop self-distances
+lookup_df = lookup_df[lookup_df["county_id"] != lookup_df["county_id_2"]]
 ```
 
 ## Calculate Haversine Distance
