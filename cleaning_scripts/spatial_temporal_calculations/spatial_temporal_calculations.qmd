@@ -12,7 +12,11 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from utils.db_cleaning_utils import spatial_fill
+import importlib
+import utils.db_cleaning_utils as dbu
+importlib.reload(dbu)
+
+from utils.db_cleaning_utils import spatial_then_yoy
 
 load_dotenv()
 ```
@@ -34,14 +38,14 @@ emp_df = pd.read_sql_table("unemployment", engine)
 county_df = pd.read_sql_table("us_counties", engine)
 ```
 
-
 ```{python}
-air_df = spatial_fill(air_df, county_df)
-gdp_df = spatial_fill(gdp_df, county_df)
-inc_df = spatial_fill(inc_df, county_df)
-perm_df = spatial_fill(perm_df, county_df)
-emp_df = spatial_fill(emp_df, county_df)
-bus_df = spatial_fill(bus_df, county_df, key_cols = ['year', "naics_industry_code"])
+# Do Spatial and year over year Calculations
+air_df = spatial_then_yoy(air_df, county_df)
+gdp_df = spatial_then_yoy(gdp_df, county_df)
+inc_df = spatial_then_yoy(inc_df, county_df)
+perm_df = spatial_then_yoy(perm_df, county_df)
+emp_df = spatial_then_yoy(emp_df, county_df)
+bus_df = spatial_then_yoy(bus_df, county_df, key_cols = ["naics_industry_code"])
 ```
 
 ```{python}
