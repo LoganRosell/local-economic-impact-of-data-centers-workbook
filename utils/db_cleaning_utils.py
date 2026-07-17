@@ -57,8 +57,6 @@ def spatial_fill(input_df, county_df, key_cols = ['year'], include_cols = None,
         dist_df = df[neighbor_dist_cols]
         with np.errstate(divide="ignore", invalid="ignore"):
             weights = 1.0 / dist_df
-        weight_sums = weights.sum(axis = 1)
-        weights = weights.div(weight_sums, axis = 0)
 
     # Do calculations
     for col in value_cols:
@@ -79,7 +77,14 @@ def spatial_fill(input_df, county_df, key_cols = ['year'], include_cols = None,
         elif calc_type == "median":
             neighbor_stat = neighbor_vals.median(axis = 1)
         else: # weighted avg
-            neighbor_stat = (neighbor_vals.values * weights.values).sum(axis = 1)
+            raw_weights = weights[neighbor_dist_cols].copy()
+            raw_weights.columns = neighbor_id_cols
+            valid_mask = ~neighbor_vals.isna()
+            masked_weights = raw_weights.where(valid_mask, other=0.0)
+            weight_sums = masked_weights.sum(axis=1)
+            normalized_weights = masked_weights.div(weight_sums.replace(0, np.nan), axis=0)
+            products = neighbor_vals * normalized_weights
+            neighbor_stat = products.sum(axis=1)
 
         # Merge back into input_df
         df[f"__spatial_{col}"] = neighbor_stat
