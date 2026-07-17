@@ -100,3 +100,30 @@ def spatial_fill(input_df, county_df, key_cols = ['year'], include_cols = None,
             input_df = input_df.drop(columns="__spatial_fill")
 
     return input_df
+
+def all_county_years(county_df, year_start=2002, year_end=2022):
+    """
+    Creates a dataframe with all combinations of county_id and year.
+
+    Parameters:
+        - county_df: county dataframe with at least a 'county_id' column
+        - year_start: first year to include (inclusive)
+        - year_end: last year to include (inclusive)
+
+    Returns:
+        - DataFrame with columns ['county_id', 'year'] containing every
+          county_id from county_df crossed with every year in the range.
+    """
+
+    # build year range
+    years = pd.DataFrame({"year": range(year_start, year_end + 1)})
+
+    # Cross-join
+    county_df["key"] = 1
+    years["key"] = 1
+
+    out = county_df.merge(years, on="key", how="outer").drop(columns="key")
+
+    out = out.sort_values(["county_id", "year"]).reset_index(drop=True)
+
+    return out
