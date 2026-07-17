@@ -86,14 +86,19 @@ def find_nearest_counties(input_df, lookup_df, num_counties = 3):
         values = ["county_id_2", "distance_miles"]
     ).reset_index()
 
-    pivot_df.columns = [
-        f"nearest_county_{val}" if col_type == "county_id_2"
-        else f"nearest_county_distance_{val}"
-        for (col_type, val) in pivot_df.columns  
-    ]
+    new_cols = []
+    for col_type, val in pivot_df.columns:
+        if col_type == "county_id":
+            new_cols.append("county_id")
+        elif col_type == "county_id_2":
+            new_cols.append(f"nearest_county_{val}")
+        elif col_type == "distance_miles":
+            new_cols.append(f"nearest_county_{val}_distance")
+        else:
+            new_cols.append(f"{col_type}_{val}")
 
-    print(input_df.columns)
-    print(pivot_df.columns)
+    pivot_df.columns = new_cols
+
     output_df = input_df.merge(pivot_df, on="county_id", how = "left")
 
     return output_df
