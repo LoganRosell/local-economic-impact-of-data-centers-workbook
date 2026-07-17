@@ -179,7 +179,7 @@ df_final = spatial_fill(df_final, county_df, fill_type = "fill_na", num_counties
 ## Year Over Year Change Calculation
 ```{python}
 # keep only osbservations which are in the lower 48 states and DC
-df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+df_final = dbu.remove_rows_not_in_mainland_states(df_final, "county_id")
 ```
 
 ## Save to database
