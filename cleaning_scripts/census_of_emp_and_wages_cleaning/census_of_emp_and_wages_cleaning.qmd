@@ -146,7 +146,7 @@ df_final = pd.concat(list_of_df, ignore_index=True)
 ```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
-    "census_of_emp_and_wages",
+    "naics_518_establishments",
     con=engine,
     if_exists="replace",
     index=False
