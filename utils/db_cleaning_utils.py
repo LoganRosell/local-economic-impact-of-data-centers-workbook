@@ -6,7 +6,7 @@ def test_print():
 
 
 # Function for values across neighboring counties
-def spatial_fill(input_df, county_df, key_cols = ['year'], include_cols = None, 
+def spatial_fill(input_df, county_df, key_cols = None, include_cols = None, 
                  fill_type = "new_col", calc_type = "weighted_avg", 
                  num_counties = 5):
     """
@@ -15,7 +15,7 @@ def spatial_fill(input_df, county_df, key_cols = ['year'], include_cols = None,
     Parameters:
         - input_df = dataframe to do calculations on
         - county_df = the county dataframe with county id's and nearest counties
-        - key_cols = columns other than 'county_id' that act as keys (e.g. ['year'])
+        - key_cols = columns other than 'county_id' and 'year' that act as keys (e.g. ['naics_industry_code'])
         - include_cols = list of columns to do calculations on. If None, uses all numeric cols.
         - fill_type = "new_col" (create new column) or "fill_na" (fill NAs in existing col)
         - calc_type = "weighted_avg", "avg", or "median"
@@ -35,12 +35,12 @@ def spatial_fill(input_df, county_df, key_cols = ['year'], include_cols = None,
     assert calc_type in ["weighted_avg", "avg", "median"], "fill type must be 'weighted_avg', 'avg', or 'median'"
 
     key_cols = key_cols or []
-    index_cols = ["county_id"] + key_cols
+    index_cols = ["county_id", "year"] + key_cols
 
     # Find input column(s) to use
     if include_cols is None:
         value_cols = input_df.select_dtypes(include="number").columns.tolist()
-        value_cols = [c for c in value_cols if c not in key_cols]
+        value_cols = [c for c in value_cols if c not in index_cols]
     else:
         value_cols = include_cols
 
@@ -115,10 +115,8 @@ def yoy_change(df, key_cols=None, include_cols=None):
 
     Parameters:
         - df: dataframe to do year-over-year calculations on
-        - key_cols: columns (besides 'county_id' and 'year') that act as keys,
-                    e.g. ['naics_industry_code']; default: []
-        - include_cols: list of columns to do YoY on. If None, uses all numeric cols
-                        excluding key columns and 'year'.
+        - key_cols: columns (besides 'county_id' and 'year') that act as keys, e.g. ['naics_industry_code']; default: []
+        - include_cols: list of columns to do YoY on. If None, uses all numeric cols excluding key columns and 'year'.
     """
 
     key_cols = key_cols or []
@@ -140,6 +138,47 @@ def yoy_change(df, key_cols=None, include_cols=None):
         df[f"{col}_yoy_change"] = grouped[col].pct_change(fill_method=None)
 
     return df
+
+def spatial_then_yoy(input_df,
+                     county_df,
+                     key_cols=None,
+                     include_cols=None,
+                     fill_type="fill_na",
+                     calc_type="weighted_avg",
+                     num_counties=5):
+    """
+    Apply spatial_fill, then yoy_change on the same set of value columns.
+    """
+    key_cols = key_cols or []
+
+    # If include_cols not provided, auto-select base columns
+    if include_cols is None:
+        base_cols = input_df.select_dtypes(include="number").columns.tolist()
+        base_cols = [c for c in base_cols if c not in key_cols + ["year"]]
+        # Optionally skip already-derived stuff here
+        base_cols = [
+            c for c in base_cols
+            if not c.endswith("_yoy_change") and "_spatial_" not in c
+        ]
+        include_cols = base_cols
+
+    df_spatial = spatial_fill(
+        input_df,
+        county_df,
+        key_cols=key_cols,
+        include_cols=include_cols,
+        fill_type=fill_type,
+        calc_type=calc_type,
+        num_counties=num_counties
+    )
+
+    df_yoy = yoy_change(
+        df_spatial,
+        key_cols=key_cols,
+        include_cols=include_cols
+    )
+
+    return df_yoy
 
 def all_county_years(county_df, year_start=2002, year_end=2022):
     """
