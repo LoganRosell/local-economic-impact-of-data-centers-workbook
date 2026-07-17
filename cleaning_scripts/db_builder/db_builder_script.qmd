@@ -33,9 +33,9 @@ def try_to_run_file(file_path):
 # run all Python cleaning scripts 
 cleaning_scripts_path = data_dir.parent / "cleaning_scripts"
 
+try_to_run_file(cleaning_scripts_path / "county_codes/county_codes_cleaning_script.qmd")
 try_to_run_file(cleaning_scripts_path / "air_quality/air_quality_cleaning_script.qmd")
 try_to_run_file(cleaning_scripts_path / "business_patterns/business_patterns_cleaning.qmd")
-try_to_run_file(cleaning_scripts_path / "county_codes/county_codes_cleaning_script.qmd")
 try_to_run_file(cleaning_scripts_path / "data_centers/data_centers_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "gdp_cleaning/gdp_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "personal_income_cleaning/personal_income_cleaning.qmd")

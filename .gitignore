@@ -28,3 +28,7 @@ shared_data/
 *.jpeg
 *.jpg
 *.gif
+
+# py caches
+__pycache__/
+*.pyc

@@ -8,7 +8,12 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from utils import db_cleaning_utils
+import importlib
+import utils.db_cleaning_utils as dbu
+importlib.reload(dbu)
+
+from utils.db_cleaning_utils import all_county_years, spatial_fill
+
 load_dotenv()
 ```
 
@@ -147,16 +152,37 @@ df_final = pd.merge(df_sd, df_final, on = ["year", "county_id"], how = "left")
 df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
 ```
 
-```{python}
-# keep only osbservations which are in the lower 48 states and DC
-df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
-```
+## Fill in NAs for missing counties
 
 ```{python}
 # setup connection variables to local sql db
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
 ```
+
+```{python}
+county_df = pd.read_sql_table("us_counties", engine)
+```
+
+```{python}
+county_year_df = all_county_years(county_df, year_start = 2001, year_end = 2022)
+```
+
+```{python}
+df_final = county_year_df.merge(df_final, on = ["county_id", "year"], how = "left")
+```
+
+```{python}
+df_final = spatial_fill(df_final, county_df, fill_type = "fill_na", num_counties = 5)
+```
+
+## Year Over Year Change Calculation
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+```
+
+## Save to database
 
 ```{python}
 # export cleaned data to sql table in local db
