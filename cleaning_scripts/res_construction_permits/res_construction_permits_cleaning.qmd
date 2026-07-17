@@ -8,6 +8,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils import db_cleaning_utils
 
 load_dotenv()
 ```
@@ -158,6 +159,11 @@ def trim_years(df):
     return df
 
 df_final = trim_years(df_final)
+```
+
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
 ```
 
 ```{python}

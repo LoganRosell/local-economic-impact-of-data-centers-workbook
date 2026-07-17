@@ -15,6 +15,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils import db_cleaning_utils
 
 load_dotenv()
 ```
@@ -122,6 +123,10 @@ df_raw.loc[df_raw["county_id"] == "46113", "county_id"] = "46102"
 df_final = df_raw.groupby(['year', 'county_id'], as_index = False)['population'].sum()
 ```
 
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+```
 
 ## EDA
 
@@ -134,15 +139,15 @@ df_final.describe()
 
 #### Average Population Over Time
 ```{python}
-sns.lineplot(df_final, x='year', y='population')
+# sns.lineplot(df_final, x='year', y='population')
 
-plt.title("Average Population by County Over Time")
-plt.xlabel("Year")
-plt.ylabel("Population")
+# plt.title("Average Population by County Over Time")
+# plt.xlabel("Year")
+# plt.ylabel("Population")
 
-plt.yticks(rotation=45)
+# plt.yticks(rotation=45)
 
-plt.show()
+# plt.show()
 ```
 
 # Export to database

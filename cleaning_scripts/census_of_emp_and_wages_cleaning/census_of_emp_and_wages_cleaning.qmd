@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 import duckdb
 from utils import db_cleaning_utils
+
 load_dotenv()
 ```
 
@@ -131,7 +132,7 @@ for file_year in np.arange(2004,2026):
                         "disclosure_code", "own_code",
                         "size_code", "estabs"]
     df_raw = remove_non_county_id_codes(df_raw)
-    df_raw = remove_rows_not_in_mainland_states(df_raw, "county_id")
+    df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
 
     list_of_df.append(df_raw)
 

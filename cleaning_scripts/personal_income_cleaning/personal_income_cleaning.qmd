@@ -16,6 +16,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils import db_cleaning_utils
 
 load_dotenv()
 ```
@@ -176,6 +177,12 @@ va_indy_cities = ['51510', '51515', '51520', '51530', '51540', '51550', '51570',
 df_final = df_final[~df_final['county_id'].isin(va_indy_cities)]
 ```
 
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+```
+
+
 ## EDA
 
 ### Summary Statistics
@@ -187,20 +194,20 @@ df_final.describe()
 
 
 ```{python}
-income_means_year = df_final.groupby('year')[value_columns].mean()
+# income_means_year = df_final.groupby('year')[value_columns].mean()
 ```
 
 #### Average Per Capita Income Over Time
 ```{python}
-sns.lineplot(income_means_year, x='year', y='per_capita_personal_income_dollars')
+# sns.lineplot(income_means_year, x='year', y='per_capita_personal_income_dollars')
 
-plt.title("Average Per Capita Personal Income Over Time")
-plt.xlabel("Year")
-plt.ylabel("Per Capita Personal Income")
+# plt.title("Average Per Capita Personal Income Over Time")
+# plt.xlabel("Year")
+# plt.ylabel("Per Capita Personal Income")
 
-plt.yticks(rotation=45)
+# plt.yticks(rotation=45)
 
-plt.show()
+# plt.show()
 ```
 
 # Export to database

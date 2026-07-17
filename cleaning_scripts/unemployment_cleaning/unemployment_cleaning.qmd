@@ -15,6 +15,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils import db_cleaning_utils
 
 load_dotenv()
 ```
@@ -106,6 +107,11 @@ df_final = trim_years(df_final)
 df_final = df_final[df_final["county_id"] != "11000"]
 ```
 
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+```
+
 ## EDA
 
 ### Summary Statistics
@@ -125,37 +131,37 @@ unemployment_means_year = df_final.groupby('year')[value_cols].mean()
 
 #### Average Employment and Unemployment Rates by County Over Time
 ```{python}
-sns.lineplot(unemployment_means_year, x='year', y='civilian_labor_force', label='Civilian Labor Force')
+# sns.lineplot(unemployment_means_year, x='year', y='civilian_labor_force', label='Civilian Labor Force')
 
-sns.lineplot(unemployment_means_year, x='year', y='employed', label='Employed')
+# sns.lineplot(unemployment_means_year, x='year', y='employed', label='Employed')
 
-sns.lineplot(unemployment_means_year, x='year', y='unemployed', label='Unemployed')
+# sns.lineplot(unemployment_means_year, x='year', y='unemployed', label='Unemployed')
 
-plt.legend()
+# plt.legend()
 
-plt.title("Average Employment and Unemployment Rates by County Over Time")
-plt.xlabel("Year")
-plt.ylabel("Number of People")
+# plt.title("Average Employment and Unemployment Rates by County Over Time")
+# plt.xlabel("Year")
+# plt.ylabel("Number of People")
 
-ax = plt.gca()
-ax.ticklabel_format(style='plain')
+# ax = plt.gca()
+# ax.ticklabel_format(style='plain')
 
-plt.yticks(rotation=45)
+# plt.yticks(rotation=45)
 
-plt.show()
+# plt.show()
 ```
 
 #### Average Unemployment Rate by County Over Time
 ```{python}
-sns.lineplot(unemployment_means_year, x='year', y='unemployment_rate')
+# sns.lineplot(unemployment_means_year, x='year', y='unemployment_rate')
 
-plt.title("Average Unemployment Rate by County Over Time")
-plt.xlabel("Year")
-plt.ylabel("Unemployment Rate (%)")
+# plt.title("Average Unemployment Rate by County Over Time")
+# plt.xlabel("Year")
+# plt.ylabel("Unemployment Rate (%)")
 
-plt.yticks(rotation=45)
+# plt.yticks(rotation=45)
 
-plt.show()
+# plt.show()
 ```
 
 # Export to database

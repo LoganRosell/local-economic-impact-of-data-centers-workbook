@@ -15,6 +15,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils import db_cleaning_utils
 
 load_dotenv()
 ```
@@ -165,6 +166,11 @@ va_indy_cities = ['51510', '51515', '51520', '51530', '51540', '51550', '51570',
 df_final = df_final[~df_final['county_id'].isin(va_indy_cities)]
 ```
 
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+```
+
 ## EDA
 
 ### Summary Statistics
@@ -175,44 +181,44 @@ df_final.describe()
 ### Example Plots
 
 ```{python}
-gdp_cols = ['quantity_index_gdp', 'current_gdp_dollars_thousands', 'real_gdp_2017_dollars_thousands']
+# gdp_cols = ['quantity_index_gdp', 'current_gdp_dollars_thousands', 'real_gdp_2017_dollars_thousands']
 ```
 
 ```{python}
-gdp_means_year = df_final.groupby('year')[gdp_cols].mean()
+# gdp_means_year = df_final.groupby('year')[gdp_cols].mean()
 ```
 
 #### Average County GDP Over Time (for Current-Dollar & Real GDP)
 ```{python}
-sns.lineplot(gdp_means_year, x='year', y='current_gdp_dollars_thousands', label='Current-Dollar GDP')
+# sns.lineplot(gdp_means_year, x='year', y='current_gdp_dollars_thousands', label='Current-Dollar GDP')
 
-sns.lineplot(gdp_means_year, x='year', y='real_gdp_2017_dollars_thousands', label='Real GDP')
+# sns.lineplot(gdp_means_year, x='year', y='real_gdp_2017_dollars_thousands', label='Real GDP')
 
-plt.legend()
+# plt.legend()
 
-plt.title("Average County GDP Over Time")
-plt.xlabel("Year")
-plt.ylabel("GDP (thousands of dollars)")
+# plt.title("Average County GDP Over Time")
+# plt.xlabel("Year")
+# plt.ylabel("GDP (thousands of dollars)")
 
-ax = plt.gca()
-ax.ticklabel_format(style='plain')
+# ax = plt.gca()
+# ax.ticklabel_format(style='plain')
 
-plt.yticks(rotation=45)
+# plt.yticks(rotation=45)
 
-plt.show()
+# plt.show()
 ```
 
 #### Average County GDP Over Time (for Quantity Index)
 ```{python}
-sns.lineplot(gdp_means_year, x='year', y='quantity_index_gdp')
+# sns.lineplot(gdp_means_year, x='year', y='quantity_index_gdp')
 
-plt.title("Average County Quantity Index for GDP Over Time")
-plt.xlabel("Year")
-plt.ylabel("Quantity Index for Real GDP")
+# plt.title("Average County Quantity Index for GDP Over Time")
+# plt.xlabel("Year")
+# plt.ylabel("Quantity Index for Real GDP")
 
-plt.yticks(rotation=45)
+# plt.yticks(rotation=45)
 
-plt.show()
+# plt.show()
 ```
 
 # Export to database
