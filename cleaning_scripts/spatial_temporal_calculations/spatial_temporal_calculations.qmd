@@ -36,16 +36,25 @@ inc_df = pd.read_sql_table("personal_income", engine)
 perm_df = pd.read_sql_table("res_construction_permits", engine)
 emp_df = pd.read_sql_table("unemployment", engine)
 county_df = pd.read_sql_table("us_counties", engine)
+dc_df = pd.read_sql_table("naics_518_establishments")
 ```
 
 ```{python}
-# Do Spatial and year over year Calculations
+# Do Spatial and year over year Calculations for most tables
 air_df = spatial_then_yoy(air_df, county_df)
 gdp_df = spatial_then_yoy(gdp_df, county_df)
 inc_df = spatial_then_yoy(inc_df, county_df)
 perm_df = spatial_then_yoy(perm_df, county_df)
 emp_df = spatial_then_yoy(emp_df, county_df)
 bus_df = spatial_then_yoy(bus_df, county_df, key_cols = ["naics_industry_code"])
+```
+
+```{python}
+# Do Spatial and yoy calculations for dc_df
+county_year_df = all_county_years(county_df, year_start = 2004, year_end = 2025)
+dc_df = county_year_df.merge(dc_df, on = ["county_id", "year"], how = "left")
+
+dc_df = spatial_then_yoy(dc_df, county_df, include_cols = ["estabs"], fill_type = "new_col", include_self = True, num_counties = 10)
 ```
 
 ```{python}
