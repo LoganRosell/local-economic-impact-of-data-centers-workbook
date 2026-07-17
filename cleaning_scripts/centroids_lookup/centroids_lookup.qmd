@@ -1,0 +1,133 @@
+---
+title: "Centroids Lookup Table Creation Script"
+format: html
+---
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from haversine import haversine, Unit
+
+load_dotenv()
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+# Load required table
+county_df = pd.read_sql_table("us_counties", engine)
+```
+
+## Prepare Dataframes for merging
+
+```{python}
+county_lookup = county_df[["county_id", "centroid_lon", "centroid_lat"]].copy()
+county_lookup_2 = county_df[["county_id", "centroid_lon", "centroid_lat"]].copy()
+
+county_lookup_2 = county_lookup_2.rename(columns = {
+    "county_id": "county_id_2",
+    "centroid_lon": "centroid_lon_2",
+    "centroid_lat": "centroid_lat_2"
+})
+```
+
+## Cross-Join Dataframes
+
+```{python}
+lookup_df = county_lookup.merge(county_lookup_2, how="cross")
+
+# drop self-distances
+lookup_df = lookup_df[lookup_df["county_id"] != lookup_df["county_id_2"]]
+```
+
+## Calculate Haversine Distance
+
+```{python}
+lookup_df["distance_miles"] = lookup_df.apply(
+    lambda row: haversine(
+        (row["centroid_lat"], row["centroid_lon"]),
+        (row["centroid_lat_2"], row["centroid_lon_2"]),
+        unit = Unit.MILES
+    ),
+    axis = 1
+)
+```
+
+## Finding nearest counties
+
+```{python}
+def find_nearest_counties(input_df, lookup_df, num_counties = 3):
+    """
+    For each county in input_df, find num_counties nearest other counties using lookup_df, and append their IDs and distances as new columns
+    Assumptions:
+        - lookup_df has columns [county_id, county_id_2, distance_miles]
+        - input_df has a `county_id` column
+    """
+    lookup_df = lookup_df[["county_id", "county_id_2", "distance_miles"]]
+    lookup_df = lookup_df.sort_values(["county_id", "distance_miles"])
+
+    k_nearest = lookup_df.groupby("county_id").head(num_counties)
+
+    k_nearest = k_nearest.copy()
+    k_nearest["rank"] = k_nearest.groupby("county_id").cumcount() + 1
+
+    pivot_df = k_nearest.pivot(
+        index = "county_id",
+        columns = "rank",
+        values = ["county_id_2", "distance_miles"]
+    ).reset_index()
+
+    new_cols = []
+    for col_type, val in pivot_df.columns:
+        if col_type == "county_id":
+            new_cols.append("county_id")
+        elif col_type == "county_id_2":
+            new_cols.append(f"nearest_county_{val}")
+        elif col_type == "distance_miles":
+            new_cols.append(f"nearest_county_{val}_distance")
+        else:
+            new_cols.append(f"{col_type}_{val}")
+
+    pivot_df.columns = new_cols
+
+    output_df = input_df.merge(pivot_df, on="county_id", how = "left")
+
+    return output_df
+```
+
+```{python}
+final_county_df = find_nearest_counties(county_df, lookup_df, 10)
+```
+
+## Update Database
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+```
+
+```{python}
+lookup_df.to_sql(
+    "county_distances_lookup",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+final_county_df.to_sql(
+    "us_counties",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
+
