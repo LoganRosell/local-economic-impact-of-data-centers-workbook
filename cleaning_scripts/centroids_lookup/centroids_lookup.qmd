@@ -62,7 +62,40 @@ lookup_df["distance_miles"] = lookup_df.apply(
 )
 ```
 
-## Update County table to use closest data center distance
+## Finding nearest counties
+
+```{python}
+def find_nearest_counties(input_df, lookup_df, num_counties = 3):
+    """
+    For each county in input_df, find num_counties nearest other counties using lookup_df, and append their IDs and distances as new columns
+    Assumptions:
+        - lookup_df has columns [county_id, county_id_2, distance_miles]
+        - input_df has a `county_id` column
+    """
+    lookup_df = lookup_df[["county_id", "county_id_2", "distance_miles"]]
+    lookup_df = lookup_df.sort_values(["county_id", "distance_miles"])
+
+    k_nearest = lookup_df.groupby("county_id").head(num_counties)
+
+    k_nearest = k_nearest.copy()
+    k_nearest["rank"] = k_nearest.groupby("county_id").cumcount() + 1
+
+    pivot_df = k_nearest.pivot(
+        index = "county_id",
+        columns = "rank",
+        values = ["county_id_2", "distance_miles"]
+    ).reset_index()
+
+    pivot_df.columns = [
+        f"nearest_county_{val}" if col_type == "county_id_2"
+        else f"nearest_county_distance_{val}"
+        for (col_type, val) in pivot_df.columns  
+    ]
+
+    output_df = input_df.merge(pivot_df, on="county_id", how = "left")
+
+    return output_df
+```
 
 ```{python}
 # nearest_dc_idx = lookup_df.groupby("county_id")["distance_miles"].idxmin()
