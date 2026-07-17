@@ -34,6 +34,7 @@ def try_to_run_file(file_path):
 cleaning_scripts_path = data_dir.parent / "cleaning_scripts"
 
 try_to_run_file(cleaning_scripts_path / "county_codes/county_codes_cleaning_script.qmd")
+try_to_run_file(cleaning_scripts_path / "centroids_lookup/centroids_lookup.qmd")
 try_to_run_file(cleaning_scripts_path / "air_quality/air_quality_cleaning_script.qmd")
 try_to_run_file(cleaning_scripts_path / "business_patterns/business_patterns_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "data_centers/data_centers_cleaning.qmd")
@@ -42,7 +43,6 @@ try_to_run_file(cleaning_scripts_path / "personal_income_cleaning/personal_incom
 try_to_run_file(cleaning_scripts_path / "population_cleaning/population_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "res_construction_permits/res_construction_permits_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "unemployment_cleaning/unemployment_cleaning.qmd")
-try_to_run_file(cleaning_scripts_path / "centroids_lookup/centroids_lookup.qmd")
 try_to_run_file(cleaning_scripts_path / "census_of_emp_and_wages_cleaning/census_of_emp_and_wages_cleaning.qmd")
 try_to_run_file(cleaning_scripts_path / "spatial_temporal_calculations/spatial_temporal_calculations.qmd")
 ```
