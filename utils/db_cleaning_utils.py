@@ -146,7 +146,7 @@ def spatial_then_yoy(input_df,
                      county_df,
                      key_cols=None,
                      include_cols=None,
-                     fill_type="fill_na",
+                     fill_type="new_col",
                      calc_type="weighted_avg",
                      num_counties=5):
     """
