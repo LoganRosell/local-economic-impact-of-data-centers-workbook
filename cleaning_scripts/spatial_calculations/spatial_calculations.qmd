@@ -24,7 +24,66 @@ engine = create_engine(database_url)
 ```
 
 ```{python}
-# Load required table
+# Load required tables
+air_df = pd.read_sql_table("air_quality", engine)
+bus_df = pd.read_sql_table("business_patterns", engine)
+gdp_df = pd.read_sql_table("gdp", engine)
+inc_df = pd.read_sql_table("personal_income", engine)
+perm_df = pd.read_sql_table("res_construction_permits", engine)
+emp_df = pd.read_sql_table("unemployment", engine)
 county_df = pd.read_sql_table("us_counties", engine)
 ```
 
+
+```{python}
+air_df = spatial_fill(air_df, county_df)
+gdp_df = spatial_fill(gdp_df, county_df)
+inc_df = spatial_fill(inc_df, county_df)
+perm_df = spatial_fill(perm_df, county_df)
+emp_df = spatial_fill(emp_df, county_df)
+bus_df = spatial_fill(bus_df, county_df, key_cols = ['year', "naics_industry_code"])
+```
+
+```{python}
+air_df.to_sql(
+    "air_quality",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+bus_df.to_sql(
+    "business_patterns",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+gdp_df.to_sql(
+    "gdp",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+inc_df.to_sql(
+    "personal_income",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+perm_df.to_sql(
+    "res_construction_permits",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+
+emp_df.to_sql(
+    "unemployment",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
