@@ -105,20 +105,7 @@ def find_nearest_counties(input_df, lookup_df, num_counties = 3):
 ```
 
 ```{python}
-final_county_df = find_nearest_counties(county_df, lookup_df, 5)
-```
-
-```{python}
-# nearest_dc_idx = lookup_df.groupby("county_id")["distance_miles"].idxmin()
-
-# nearest_dc = lookup_df.loc[
-#     nearest_dc_idx,
-#     ["county_id", "data_center_id", "distance_miles"]
-#     ].rename(columns = {"distance_miles": "min_distance_to_dc_mi", "data_center_id": "nearest_dc_id"})
-```
-
-```{python}
-# final_county_df = county_df.copy().merge(nearest_dc, on = "county_id", how = "left")
+final_county_df = find_nearest_counties(county_df, lookup_df, 10)
 ```
 
 ## Update Database
