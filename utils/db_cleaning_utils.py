@@ -64,10 +64,13 @@ def spatial_fill(input_df, county_df, key_cols = None, include_cols = None,
 
         neighbor_vals = []
         for nc in neighbor_id_cols:
-            tmp_idx = pd.DataFrame({"neighbor_county_id": df[nc]})
+            tmp_idx = pd.DataFrame({
+                "county_id": df[nc],      # neighbor county id
+                "year": df["year"],       # keep same year
+            })
             for k in key_cols:
                 tmp_idx[k] = df[k]
-            tmp_idx = tmp_idx.set_index(["neighbor_county_id"] + key_cols)
+            tmp_idx = tmp_idx.set_index(index_cols)
             neighbor_vals.append(tmp_idx.index.map(val_by_key))
         neighbor_vals = pd.DataFrame(neighbor_vals).T
         neighbor_vals.columns = neighbor_id_cols
