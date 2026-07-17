@@ -4,6 +4,7 @@ Thumbs.db
 
 # Environment (Holds secrest)
 *.env
+*.egg-info/
 
 # Data sources (too large for git)
 **/*.csv

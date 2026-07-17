@@ -1,0 +1,55 @@
+```{python}
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+import duckdb
+
+load_dotenv()
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+data_dir = Path(os.environ["DATA_DIR"])
+engine = create_engine(database_url)
+```
+
+```{python}
+def load_data(csv_path):
+    df = pd.read_csv(
+        csv_path,
+        dtype = {
+            "fipstate": str, 
+            "FIPSTATE": str,
+            "fipscty": str,
+            "FIPSCTY": str}
+    )
+    return df
+```
+
+```{python}
+
+def duck_db_load_data(csv_path):
+    df = duckdb.query(f"""
+        SELECT *
+        FROM '{csv_path}' 
+        WHERE industry_code = '518'
+    """).df()
+    return df
+```
+
+```{python}
+for file_year in np.arange(2004,2026):
+
+    input_csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}.q1-q4.singlefile.csv"
+    output_csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}_q1_q4_naics_518_data_only.csv"
+
+    df_raw = duck_db_load_data(input_csv_path)
+    df_raw.to_csv(output_csv_path, index=False)
+    
+```
