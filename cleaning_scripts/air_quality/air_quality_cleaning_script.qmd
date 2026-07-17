@@ -8,7 +8,11 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from utils.db_cleaning_utils import spatial_fill
+import importlib
+import utils.db_cleaning_utils as dbu
+importlib.reload(dbu)
+
+from utils.db_cleaning_utils import all_county_years, spatial_fill
 
 load_dotenv()
 ```
@@ -151,7 +155,25 @@ df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
 ## Fill in NAs for missing counties
 
 ```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
 county_df = pd.read_sql_table("us_counties", engine)
+```
+
+```{python}
+county_year_df = all_county_years(county_df, year_start = 2001, year_end = 2022)
+```
+
+```{python}
+df_final = county_year_df.merge(df_final, on = ["county_id", "year"], how = "left")
+```
+
+```{python}
+df_final = spatial_fill(df_final, county_df, fill_type = "fill_na", num_counties = 5)
 ```
 
 ## Year Over Year Change Calculation
@@ -164,11 +186,7 @@ for col in yoy_cols:
     df_final[f"{col}_yoy_change"] = df_final.groupby("county_id")[col].pct_change(fill_method=None)
 ```
 
-```{python}
-# setup connection variables to local sql db
-database_url = os.getenv("DATABASE_URL")
-engine = create_engine(database_url)
-```
+## Save to database
 
 ```{python}
 # export cleaned data to sql table in local db
