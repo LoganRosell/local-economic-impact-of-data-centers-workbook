@@ -92,9 +92,15 @@ def find_nearest_counties(input_df, lookup_df, num_counties = 3):
         for (col_type, val) in pivot_df.columns  
     ]
 
+    print(input_df.columns)
+    print(pivot_df.columns)
     output_df = input_df.merge(pivot_df, on="county_id", how = "left")
 
     return output_df
+```
+
+```{python}
+final_county_df = find_nearest_counties(county_df, lookup_df, 5)
 ```
 
 ```{python}
@@ -125,11 +131,11 @@ lookup_df.to_sql(
     index=False
 )
 
-# final_county_df.to_sql(
-#     "us_counties",
-#     con=engine,
-#     if_exists="replace",
-#     index=False
-# )
+final_county_df.to_sql(
+    "us_counties",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
 ```
 
