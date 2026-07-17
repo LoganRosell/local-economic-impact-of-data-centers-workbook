@@ -9,6 +9,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils import db_cleaning_utils
 
 load_dotenv()
 ```
@@ -134,6 +135,11 @@ Connetticut counties are missing due to change in FIPS codes, need to come back 
 physical_areas_df = physical_areas_df[["GEOID", "ALAND_SQMI", "AWATER_SQMI"]]
 physical_areas_df.columns = ["county_id", "land_area_sqmi", "water_area_sqmi"]
 df_final = pd.merge(left=df_final, right=physical_areas_df, on="county_id", how="left")
+```
+
+```{python}
+# keep only osbservations which are in the lower 48 states and DC
+df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
 ```
 
 ```{python}
