@@ -8,6 +8,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from utils.db_cleaning_utils import spatial_fill
 
 load_dotenv()
 ```
@@ -147,6 +148,13 @@ df_final = pd.merge(df_sd, df_final, on = ["year", "county_id"], how = "left")
 df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
 ```
 
+## Fill in NAs for missing counties
+
+```{python}
+county_df = pd.read_sql_table("us_counties", engine)
+```
+
+## Year Over Year Change Calculation
 ```{python}
 # Find year-over-year change 
 df_final = df_final.sort_values(["county_id", "year"]).reset_index(drop=True)
