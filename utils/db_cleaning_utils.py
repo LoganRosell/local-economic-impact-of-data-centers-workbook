@@ -127,6 +127,8 @@ def all_county_years(county_df, year_start=2002, year_end=2022):
 
     out = county_df.merge(years, on="key", how="outer").drop(columns="key")
 
+    out = out[["county_id", "year"]]
+
     out = out.sort_values(["county_id", "year"]).reset_index(drop=True)
 
     return out
