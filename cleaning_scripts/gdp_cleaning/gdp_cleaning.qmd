@@ -15,7 +15,8 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from utils import db_cleaning_utils
+import utils.db_cleaning_utils as dbu
+importlib.reload(dbu)
 
 load_dotenv()
 ```
@@ -129,34 +130,7 @@ The BEA creates synthetic FIPS codes for independent cities and the county they 
 We will be attributing the combined measurments for the independent city and its parent county just the standard county_id rather than the synthetic id. Not all our data sources use the synthetic id meaning that the county_id is more universal. 
 
 ```{python}
-
-va_synthetic_to_standard_mapping = {
-    '51901': '51003',
-    '51903': '51005',
-    '51907': '51015',
-    '51911': '51031',
-    '51913': '51035',
-    '51918': '51053',
-    '51919': '51059',
-    '51921': '51069',
-    '51923': '51081',
-    '51929': '51089',
-    '51931': '51095',
-    '51933': '51121',
-    '51939': '51143',
-    '51941': '51149',
-    '51942': '51153',
-    '51944': '51161',
-    '51945': '51163',
-    '51947': '51165',
-    '51949': '51175',
-    '51951': '51177',
-    '51953': '51191',
-    '51955': '51195',
-    '51958': '51199'
-}
-
-df_final["county_id"] = df_final["county_id"].replace(va_synthetic_to_standard_mapping)
+df_final = dbu.va_cities_to_parent_county(df_final)
 ```
 
 ```{python}
@@ -168,7 +142,7 @@ df_final = df_final[~df_final['county_id'].isin(va_indy_cities)]
 
 ```{python}
 # keep only osbservations which are in the lower 48 states and DC
-df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+df_final = dbu.remove_rows_not_in_mainland_states(df_final, "county_id")
 ```
 
 ## EDA

@@ -5,6 +5,8 @@ DROP TABLE IF EXISTS county_population;
 drop table if exists county_gdp;
 
 -- Check for duplicates in composite keys across all db tables
+
+--air_quality
 SELECT
   year,
   county_id,
@@ -13,6 +15,7 @@ FROM air_quality
 GROUP BY year, county_id
 HAVING COUNT(*) > 1;
 
+--business_patterns
 SELECT
   year,
   county_id,
@@ -22,6 +25,16 @@ FROM business_patterns
 GROUP BY year, county_id, naics_industry_code
 HAVING COUNT(*) > 1;
 
+--county_distances_lookup
+SELECT
+  county_id,
+  county_id_2,
+  COUNT(*) AS dup_count
+FROM county_distances_lookup
+GROUP BY county_id, county_id_2
+HAVING COUNT(*) > 1;
+
+--gdp
 SELECT
   year,
   county_id,
@@ -30,6 +43,24 @@ FROM gdp
 GROUP BY year, county_id
 HAVING COUNT(*) > 1;
 
+--naics_518_establishments
+SELECT
+  year,
+  county_id,
+  COUNT(*) AS dup_count
+FROM naics_518_establishments
+GROUP BY year, county_id
+HAVING COUNT(*) > 1;
+
+--naics_code_look_up
+SELECT
+  sector,
+  COUNT(*) AS dup_count
+FROM naics_code_look_up
+GROUP BY sector
+HAVING COUNT(*) > 1;
+
+--personal_income
 SELECT
   year,
   county_id,
@@ -38,6 +69,7 @@ FROM personal_income
 GROUP BY year, county_id
 HAVING COUNT(*) > 1;
 
+--population
 SELECT
   year,
   county_id,
@@ -46,6 +78,7 @@ FROM population
 GROUP BY year, county_id
 HAVING COUNT(*) > 1;
 
+--res_construction_permits
 SELECT
   year,
   county_id,
@@ -54,6 +87,7 @@ FROM res_construction_permits
 GROUP BY year, county_id
 HAVING COUNT(*) > 1;
 
+--unemployment
 SELECT
   year,
   county_id,
@@ -62,6 +96,7 @@ FROM unemployment
 GROUP BY year, county_id
 HAVING COUNT(*) > 1;
 
+--us_counties
 SELECT
   county_id,
   COUNT(*) AS dup_count
@@ -69,12 +104,13 @@ FROM us_counties
 GROUP BY county_id
 HAVING COUNT(*) > 1;
 
-SELECT
-  data_center_id,
-  COUNT(*) AS dup_count
-FROM data_centers
-GROUP BY data_center_id
-HAVING COUNT(*) > 1;
+-- --data_centers
+-- SELECT
+--   data_center_id,
+--   COUNT(*) AS dup_count
+-- FROM data_centers
+-- GROUP BY data_center_id
+-- HAVING COUNT(*) > 1;
 
 --========================================
 -- Check for records present in one table but not another
@@ -95,43 +131,14 @@ SELECT
     (SELECT COUNT(*) FROM us_counties) AS total_us_counties,
     (SELECT COUNT(DISTINCT county_id) FROM air_quality) AS air_quality_counties,
     (SELECT COUNT(DISTINCT county_id) FROM business_patterns) AS business_counties,
-    (SELECT COUNT(DISTINCT county_id) FROM population) AS population_counties,
-    (SELECT COUNT(DISTINCT county_id) FROM data_centers) AS data_center_counties,
+    (SELECT COUNT(DISTINCT county_id) FROM county_distances_lookup) AS county_dist,
     (SELECT COUNT(DISTINCT county_id) FROM gdp) AS gdp_counties,
+    (SELECT COUNT(DISTINCT county_id) FROM naics_518_establishments) AS income_counties,
     (SELECT COUNT(DISTINCT county_id) FROM personal_income) AS income_counties,
+    (SELECT COUNT(DISTINCT county_id) FROM population) AS population_counties,
     (SELECT COUNT(DISTINCT county_id) FROM res_construction_permits) AS permit_counties,
     (SELECT COUNT(DISTINCT county_id) FROM unemployment) AS unemployment_counties;
 
-
--- return only counties found in all tables except for the data_centers table
-SELECT DISTINCT 
-    county_id,
-    county_name,
-    state,
-    functional_status,
-    fips_class_code
-FROM us_counties
-WHERE county_id IN (
-    SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
-    INTERSECT
-    (
-      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
-      INTERSECT 
-      SELECT DISTINCT CAST(county_id AS varchar) FROM air_quality
-      INTERSECT 
-      SELECT DISTINCT CAST(county_id AS varchar) FROM business_patterns
-      INTERSECT 
-      SELECT DISTINCT CAST(county_id AS varchar) FROM population
-      INTERSECT 
-      SELECT DISTINCT CAST(county_id AS varchar) FROM gdp
-      INTERSECT
-      SELECT DISTINCT CAST(county_id AS varchar) FROM personal_income
-      INTERSECT
-      SELECT DISTINCT CAST(county_id AS varchar) FROM res_construction_permits
-      INTERSECT
-      SELECT DISTINCT CAST(county_id AS varchar) FROM unemployment
-    )
-);
 
 
 -- return counties which do not appear in all datasets
@@ -151,7 +158,9 @@ WHERE county_id IN (
       SELECT DISTINCT CAST(county_id AS varchar) FROM air_quality
       INTERSECT 
       SELECT DISTINCT CAST(county_id AS varchar) FROM business_patterns
-      INTERSECT 
+      INTERSECT
+      SELECT DISTINCT CAST(county_id AS varchar) FROM county_distances_lookup
+      INTERSECT
       SELECT DISTINCT CAST(county_id AS varchar) FROM population
       INTERSECT 
       SELECT DISTINCT CAST(county_id AS varchar) FROM gdp
@@ -176,6 +185,7 @@ WITH county_presence AS (
         -- Check presence in each table (1 if exists, 0 if missing)
         CASE WHEN aq.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_air_quality,
         CASE WHEN bp.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_business_patterns,
+        CASE WHEN cdl.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_county_dist,
         CASE WHEN p.county_id  IS NOT NULL THEN 1 ELSE 0 END AS in_population,
         CASE WHEN g.county_id  IS NOT NULL THEN 1 ELSE 0 END AS in_gdp,
         CASE WHEN pi.county_id IS NOT NULL THEN 1 ELSE 0 END AS in_personal_income,
@@ -186,6 +196,8 @@ WITH county_presence AS (
         ON CAST(c.county_id AS varchar) = aq.county_id
     LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM business_patterns) bp 
         ON CAST(c.county_id AS varchar) = bp.county_id
+    LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM county_distances_lookup) cdl 
+        ON CAST(c.county_id AS varchar) = cdl.county_id
     LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM population) p 
         ON CAST(c.county_id AS varchar) = p.county_id
     LEFT JOIN (SELECT DISTINCT CAST(county_id AS varchar) AS county_id FROM gdp) g 
@@ -203,6 +215,7 @@ scored_presence AS (
         -- Sum the individual flags to get the total row score
         (in_air_quality + 
          in_business_patterns + 
+         in_county_dist +
          in_population + 
          in_gdp + 
          in_personal_income + 
@@ -218,9 +231,6 @@ ORDER BY total_tables_present ASC, state, county_name;
 
 
 
-
-
-
 -- ================================================
 -- Check range of years covered by each table
 
@@ -229,6 +239,8 @@ SELECT
   (SELECT MIN(year) FROM air_quality) AS air_quality_min_year,
   (SELECT MAX(year) FROM business_patterns) AS business_patterns_max_year,
   (SELECT MIN(year) FROM business_patterns) AS business_patterns_min_year,
+  (SELECT MAX(year) FROM naics_518_establishments) AS naics_518_establishments_max_year,
+  (SELECT MIN(year) FROM naics_518_establishments) AS naics_518_establishments_min_year,
   (SELECT MAX(year) FROM population) AS population_max_year,
   (SELECT MIN(year) FROM population) AS population_min_year,
   (SELECT MAX(year) FROM gdp) AS gdp_max_year,
@@ -267,20 +279,17 @@ WHERE county_id IN (
     )
 );
 
-
--- Check for county_ids which appear in data_centers but not in us_counties table
+-- Check for county_ids which appear in county_distances_lookup but not in us_counties table
 SELECT DISTINCT 
     county_id
-FROM data_centers
+FROM county_distances_lookup
 WHERE county_id IN (
-    SELECT DISTINCT CAST(county_id AS varchar) FROM data_centers
+    SELECT DISTINCT CAST(county_id AS varchar) FROM county_distances_lookup
     EXCEPT
     (
       SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
     )
 );
-
-
 
 -- Check for county_ids which appear in gdp but not in us_counties table
 SELECT DISTINCT 
@@ -288,6 +297,18 @@ SELECT DISTINCT
 FROM gdp
 WHERE county_id IN (
     SELECT DISTINCT CAST(county_id AS varchar) FROM gdp
+    EXCEPT
+    (
+      SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties
+    )
+);
+
+-- Check for county_ids which appear in naics_518_establishments but not in us_counties table
+SELECT DISTINCT 
+    county_id
+FROM naics_518_establishments
+WHERE county_id IN (
+    SELECT DISTINCT CAST(county_id AS varchar) FROM naics_518_establishments
     EXCEPT
     (
       SELECT DISTINCT CAST(county_id AS varchar) FROM us_counties

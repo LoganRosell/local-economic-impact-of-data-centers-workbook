@@ -47,9 +47,6 @@ def duck_db_load_data(csv_path):
             agglvl_code,
             year,
             qtr,
-            disclosure_code,
-            own_code,
-            size_code,
             qtrly_estabs
         FROM '{csv_path}' 
         WHERE industry_code = '518'
@@ -60,46 +57,46 @@ def duck_db_load_data(csv_path):
 ```{python}
 # convert ownership codes to their title
 # dictionary built from values listed here: https://www.bls.gov/cew/classifications/ownerships/ownership-titles.htm
-own_code_dict = {
-    0: "Total Covered",
-    5: "Private",
-    4: "International Government",
-    3: "Local Government",
-    2: "State Government",
-    1: "Federal Government",
-    8: "Total Government",
-    9: "Total U.I. Covered (Excludes Federal Government)"
-    }
+# own_code_dict = {
+#     0: "Total Covered",
+#     5: "Private",
+#     4: "International Government",
+#     3: "Local Government",
+#     2: "State Government",
+#     1: "Federal Government",
+#     8: "Total Government",
+#     9: "Total U.I. Covered (Excludes Federal Government)"
+#     }
 
-def own_code_to_title(df):
-    df['own_code'] = df['own_code'].map(own_code_dict)
-    return df
+# def own_code_to_title(df):
+#     df['own_code'] = df['own_code'].map(own_code_dict)
+#     return df
 ```
 
 ```{python}
 # convert size codes to their title 
 # dictionary built from values listed here: https://www.bls.gov/cew/classifications/size/size-titles.htm
-size_codes_dict = {
-    0: "All establishment sizes",
-    1: "Fewer than 5 employees per establishment",
-    2: "5 to 9 employees per establishment",
-    3: "10 to 19 employees per establishment",
-    4: "20 to 49 employees per establishment",
-    5: "50 to 99 employees per establishment",
-    6: "100 to 249 employees per establishment",
-    7: "250 to 499 employees per establishment",
-    8: "500 to 999 employees per establishment",
-    9: "1000 or more employees per establishment"
-}
+# size_codes_dict = {
+#     0: "All establishment sizes",
+#     1: "Fewer than 5 employees per establishment",
+#     2: "5 to 9 employees per establishment",
+#     3: "10 to 19 employees per establishment",
+#     4: "20 to 49 employees per establishment",
+#     5: "50 to 99 employees per establishment",
+#     6: "100 to 249 employees per establishment",
+#     7: "250 to 499 employees per establishment",
+#     8: "500 to 999 employees per establishment",
+#     9: "1000 or more employees per establishment"
+# }
 
-def size_code_to_title(df):
-    df['size_code'] = df['size_code'].map(size_codes_dict)
-    return df
+# def size_code_to_title(df):
+#     df['size_code'] = df['size_code'].map(size_codes_dict)
+#     return df
 ```
 
 ```{python}
 def combine_quarters(df):
-    df = df.groupby(by=["area_fips", "agglvl_code", "year", "disclosure_code", "own_code", "size_code"], as_index=False).max()
+    df = df.groupby(by=["area_fips", "agglvl_code", "year"], as_index=False).max()
     df = df.drop(columns=["qtr"])
     return df
 ```
@@ -128,13 +125,11 @@ for file_year in np.arange(2004,2026):
     csv_path = data_dir / "qrtly_census_emp_and_wages" / f"{file_year}_q1_q4_naics_518_data_only.csv"
 
     df_raw = duck_db_load_data(csv_path)
-    df_raw = own_code_to_title(df_raw)
-    df_raw = size_code_to_title(df_raw)
+    #df_raw = own_code_to_title(df_raw)
+    #df_raw = size_code_to_title(df_raw)
     df_raw = combine_quarters(df_raw)
     df_raw = filter_to_only_county_level_observations(df_raw)
-    df_raw.columns = ["county_id", "year",
-                        "disclosure_code", "own_code",
-                        "size_code", "estabs"]
+    df_raw.columns = ["county_id", "year", "estabs"]
     df_raw = remove_non_county_id_codes(df_raw)
     df_final = dbu.remove_rows_not_in_mainland_states(df_raw, "county_id")
 
