@@ -284,8 +284,8 @@ def impute_estabs_for_county(group):
         return group
     
     # Trailing missing values -> 0
-    last_valid_idx = vals_interp.last_valid_index()
-    mask_trailing = vals_interp.index > last_valid_idx
+    last_valid_idx = vals.last_valid_index()
+    mask_trailing = vals.index > last_valid_idx
     vals_interp.loc[mask_trailing] = 0
 
     group["estabs_imputed"] = vals_interp

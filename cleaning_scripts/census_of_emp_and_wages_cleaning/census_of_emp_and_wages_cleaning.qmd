@@ -167,7 +167,7 @@ df_final = county_year_grid.merge(df_final, on=["county_id", "year"], how="left"
 df_final = (
     df_final
     .groupby("county_id", group_keys=False)
-    .apply(dbu.impute_estabs_for_county)
+    .apply(dbu.impute_estabs_for_county, include_groups = False)
 )
 ```
 
