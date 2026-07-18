@@ -164,6 +164,14 @@ df_final = county_year_grid.merge(df_final, on=["county_id", "year"], how="left"
 ```
 
 ```{python}
+df_final = (
+    df_final
+    .groupby("county_id", group_keys=False)
+    .apply(dbu.impute_estabs_for_county)
+)
+```
+
+```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
     "naics_518_establishments",
