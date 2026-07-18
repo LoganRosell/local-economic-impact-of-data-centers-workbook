@@ -154,7 +154,12 @@ def yoy_change(df, key_cols=None, include_cols=None):
     grouped = df.groupby(group_keys, dropna=False)
 
     for col in value_cols:
-        df[f"{col}_yoy_change"] = grouped[col].pct_change(fill_method=None)
+        change_col = f"{col}_yoy_change"
+        df[change_col] = grouped[col].pct_change(fill_method=None)
+
+        prev = grouped[col].shift(1)
+
+        df.loc[prev==0, change_col] = np.nan
 
     return df
 
