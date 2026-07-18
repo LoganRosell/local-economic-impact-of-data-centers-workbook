@@ -259,7 +259,43 @@ def remove_rows_not_in_mainland_states(df, id_col_name):
 
     return output_df
 
+def impute_estabs_for_county(group):
+    """
+    Impute estabs for a single county across years:
+    - Fill internal gaps by linear interpolation.
+    - Set leading and trailing missing values to 0.
 
+    For use in a groupby function
+    """
+    group = group.sort_values("year").copy()
+    vals = group["estabs"]
+
+    # Interpolation for gaps
+    vals_interp = vals.interpolate(method = "linear")
+
+    # Leading missing values -> 0
+    first_valid_idx = vals_interp.first_valid_index()
+    if first_valid_idx is not None:
+        mask_leading = vals_interp.index < first_valid_idx
+        vals_interp.loc[mask_leading] = 0
+    else:
+        vals_interp[:] = 0
+        group["estabs_imputed"] = vals_interp
+        return group
+    
+    # Trailing missing values -> 0
+    last_valid_idx = vals.last_valid_index()
+    mask_trailing = vals.index > last_valid_idx
+    vals_interp.loc[mask_trailing] = 0
+
+    vals_interp = vals_interp.round()
+
+    group["estabs_imputed"] = vals_interp
+
+    # Flag whether this row was imputed
+    group["estabs_was_imputed"] = group["estabs"].isna()
+
+    return group
 def va_cities_to_parent_county(df):
     # convert fips codes for VA independent city to be parent county_id
     city_to_parent_county = {

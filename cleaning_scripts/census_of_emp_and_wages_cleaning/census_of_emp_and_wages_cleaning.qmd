@@ -138,6 +138,37 @@ for file_year in np.arange(2004,2026):
 df_final = pd.concat(list_of_df, ignore_index=True)
 ```
 
+## Impute Missingness
+
+```{python}
+counties = df_final["county_id"].unique()
+years = df_final["year"].unique()
+
+county_df = pd.DataFrame({"county_id": counties})
+year_df = pd.DataFrame({"year": years})
+
+county_year_grid = (
+    county_df
+    .assign(key=1)
+    .merge(year_df.assign(key=1), on="key", how="outer")
+    .drop(columns="key")
+    .sort_values(["county_id", "year"])
+)
+
+df_final = county_year_grid.merge(df_final, on=["county_id", "year"], how="left")
+```
+
+```{python}
+df_final = (
+    df_final
+    .groupby("county_id", group_keys=False)
+    .apply(dbu.impute_estabs_for_county, include_groups = False)
+)
+
+df_final = df_final.drop(columns = "estabs")
+df_final = df_final.rename(columns = {"estabs_imputed": "estabs"})
+```
+
 ```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
