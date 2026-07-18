@@ -8,7 +8,7 @@ def test_print():
 # Function for values across neighboring counties
 def spatial_fill(input_df, county_df, key_cols = None, include_cols = None, 
                  fill_type = "new_col", calc_type = "weighted_avg", 
-                 num_counties = 5):
+                 num_counties = 5, self_weight=0.0):
     """
     Does calculations on column(s) in a dataframe based on neighboring county information.
 
@@ -89,6 +89,22 @@ def spatial_fill(input_df, county_df, key_cols = None, include_cols = None,
             products = neighbor_vals * normalized_weights
             neighbor_stat = products.sum(axis=1)
 
+            if self_weight is not None and self_weight > 0:
+                own_vals = df[col]
+
+                self_missing = own_vals.isna()
+
+                neighbor_weight = max(0.0, 1.0 - self_weight)
+
+                blended = (
+                    self_weight * own_vals +
+                    neighbor_weight * neighbor_stat
+                )
+
+                blended = blended.where(~self_missing, neighbor_stat)
+
+                neighbor_stat = blended
+
         # Merge back into input_df
         df[f"__spatial_{col}"] = neighbor_stat
 
@@ -148,7 +164,8 @@ def spatial_then_yoy(input_df,
                      include_cols=None,
                      fill_type="new_col",
                      calc_type="weighted_avg",
-                     num_counties=5):
+                     num_counties=5, 
+                     self_weight=0.0):
     """
     Apply spatial_fill, then yoy_change on the same set of value columns.
     """
