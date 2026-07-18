@@ -288,5 +288,7 @@ def impute_estabs_for_county(group):
     mask_trailing = vals.index > last_valid_idx
     vals_interp.loc[mask_trailing] = 0
 
+    vals_interp = vals_interp.round()
+
     group["estabs_imputed"] = vals_interp
     return group
