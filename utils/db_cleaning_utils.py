@@ -291,4 +291,8 @@ def impute_estabs_for_county(group):
     vals_interp = vals_interp.round()
 
     group["estabs_imputed"] = vals_interp
+
+    # Flag whether this row was imputed
+    group["estabs_was_imputed"] = group["estabs"].isna()
+
     return group

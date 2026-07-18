@@ -169,6 +169,9 @@ df_final = (
     .groupby("county_id", group_keys=False)
     .apply(dbu.impute_estabs_for_county, include_groups = False)
 )
+
+df_final = df_final.drop(columns = "estabs")
+df_final = df_final.rename(columns = {"estabs_imputed": "estabs"})
 ```
 
 ```{python}
