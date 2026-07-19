@@ -28,11 +28,11 @@ engine = create_engine(database_url)
 ```
 
 ```{python}
-df = pd.read_sql_table("census_of_emp_and_wages", engine)
+df = pd.read_sql_table("naics_518_establishments", engine)
 cols = df.columns
 ```
-### Missingness
 
+### Missingness
 ```{python}
 # return number and percentage of NA values in each column
 print(skim(df))
@@ -237,8 +237,8 @@ plot_county_coverage(df, "Busisness Patterns", "county coverage")
 # create a choropleth map of counties for a set of desired variables in the df
 
 # Update these:
-eda_table_name = "Census of Employment and Wages"
-cols_to_use = [5]
+eda_table_name = "NAICS 518 Establishments"
+cols_to_use = [2]
 
 ## one map per column
 for i in cols_to_use:

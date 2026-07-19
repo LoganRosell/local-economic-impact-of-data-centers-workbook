@@ -296,6 +296,7 @@ def impute_estabs_for_county(group):
     group["estabs_was_imputed"] = group["estabs"].isna()
 
     return group
+
 def va_cities_to_parent_county(df):
     # convert fips codes for VA independent city to be parent county_id
     city_to_parent_county = {
