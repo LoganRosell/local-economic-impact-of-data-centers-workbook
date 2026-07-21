@@ -368,3 +368,57 @@ def va_cities_to_parent_county(df):
     df["county_id"] = df["county_id"].replace(city_to_parent_county)
     
     return df
+
+def child_to_parent_county(df, map_dict, cols_to_sum = "All", cols_to_avg = None, extra_keys = None):
+    """
+    Maps child counties/cities to parent counties, then aggregates rows
+    by summing or averaging specified columns.
+
+    Parameters:
+        df: DataFrame containing at least 'county_id' and 'year'
+        map_dict: dict of {independent_city_code: parent_county_code}
+        cols_to_sum: "All" to sum all numeric columns (except those in cols_to_avg), or list of column names to sum; or None for no sums.
+        cols_to_avg: None for no averages, "All" to average all numeric columns (except those in cols_to_sum), or list of column names to average.
+        extra_keys: list of extra key columns beyond 'county_id' and 'year'
+    """
+    extra_keys = extra_keys or []
+    
+    assert not (cols_to_sum == "All" and cols_to_avg == "All"), "cols_to_sum and cols_to_avg cannot both be 'All'."
+    assert (cols_to_sum == "All" or cols_to_avg == "All"), "Either cols_to_sum or cols_to_avg must be 'All'"
+
+    key_cols = ["county_id", "year"] + extra_keys
+
+    df = df.copy()
+    df["county_id"] = df["county_id"].replace(map_dict)
+
+    num_cols = df.select_dtypes(include="number").columns.tolist()
+    num_cols = [c for c in num_cols if c not in key_cols]
+
+    sum_cols = []
+    avg_cols = []
+
+    if not (cols_to_sum is None or cols_to_sum == "All"): # Need to do this first so I know which cols to skip in sum_cols
+        sum_cols = list(cols_to_sum)    
+    if not (cols_to_avg is None or cols_to_avg == "All"): # Need to do this first so I know which cols to skip in sum_cols
+        avg_cols = list(cols_to_avg)
+
+    if cols_to_sum == "All":
+        sum_cols = [c for c in num_cols if c not in avg_cols] # How do I ensure that sum_cols 
+    elif cols_to_sum is None:
+        sum_cols = []
+
+    if cols_to_avg == "All":
+        avg_cols = [c for c in num_cols if c not in sum_cols]
+    elif cols_to_avg is None:
+        avg_cols = []
+
+    agg_dict = {}
+    for c in sum_cols:
+        agg_dict[c] = "sum"
+    for c in avg_cols:
+        agg_dict[c] = "mean"
+
+    grouped = df.groupby(key_cols, as_index=False).agg(agg_dict)
+
+    return grouped
+
