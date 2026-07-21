@@ -4,6 +4,20 @@ import numpy as np
 def test_print():
     print("that worked!")
 
+# remove new CT county codes which do not align with pre-2022 codes
+def remove_new_ct_fips_codes(df):
+    new_ct_codes = [
+        '09110',
+        '09130',
+        '09140',
+        '09150',
+        '09160',
+        '09170',
+        '09180',
+        '09190',
+        '09120']
+    df = ~df["county_id"].isin(new_ct_codes)]
+    return df
 
 # Function for values across neighboring counties
 def spatial_fill(input_df, county_df, key_cols = None, include_cols = None, 
