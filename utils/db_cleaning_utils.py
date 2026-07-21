@@ -16,7 +16,7 @@ def remove_new_ct_fips_codes(df):
         '09180',
         '09190',
         '09120']
-    df = ~df["county_id"].isin(new_ct_codes)]
+    df = df[~df["county_id"].isin(new_ct_codes)]
     return df
 
 # Function for values across neighboring counties
