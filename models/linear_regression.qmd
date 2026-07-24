@@ -165,14 +165,16 @@ final_df = final_df.drop(columns=per_capita_cols)
 ```
 
 ```{python}
+# Rename for clarity
+final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
 ```
 
 ## Feature Engineering
 
 ```{python}
-# Rename for clarity
-final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
+
 ```
+
 
 ## Linear Regressions
 
