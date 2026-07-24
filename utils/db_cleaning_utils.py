@@ -476,25 +476,41 @@ def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_
 
     # Clean sector names
     code_df = code_df.copy()
-    code_df["sector_clean"] = (
-        code_df["definition"]
-        .str.lower()
-        .str.replace(r"[^\w\s]", "", regex=True)
-        .str.replace(r"\s+", "_", regex=True)
-        .str.strip()
-        .str[:40]
-    )
+    bucket_map = {
+        "Agriculture, Forestry, Fishing and Hunting": "primary_industries",
+        "Mining, Quarrying, and Oil and Gas Extraction": "primary_industries",
+        "Utilities": "primary_industries",
+
+        "Construction": "industrial",
+        "Manufacturing": "industrial",
+
+        "Wholesale Trade": "trade_transport",
+        "Retail Trade": "trade_transport",
+        "Transportation and Warehousing": "trade_transport",
+
+        "Information": "knowledge_capital",
+        "Finance and Insurance": "knowledge_capital",
+        "Real Estate and Rental and Leasing": "knowledge_capital",
+        "Professional, Scientific, and Technical Services": "knowledge_capital",
+        "Management of Companies and Enterprises": "knowledge_capital",
+
+        "Administrative and Support and Waste Management and Remediation Services": "local_services_public",
+        "Educational Services": "local_services_public",
+        "Health Care and Social Assistance": "local_services_public",
+        "Arts, Entertainment, and Recreation": "local_services_public",
+        "Accommodation and Food Services": "local_services_public",
+        "Other Services (except Public Administration)": "local_services_public",
+        "Public Administration": "local_services_public",
+        "Unknown": "local_services_public",
+    }
+    
+    code_df["bucket"] = code_df["definition"].map(bucket_map)
 
     # Merge codes and bus_df
     output_df = bus_df.merge(code_df, left_on = "naics_industry_code", right_on = "sector", how = "left")
 
-    # Check to make sure there were no missing mappings
-    if output_df["sector_clean"].isna().any():
-        missing = output_df.loc[output_df["sector_clean"].isna(), "naics_industry_code"].unique()
-        print(f"Warning: Missing sector mappings for codes: {missing}")
-
     grouped_df = (
-        output_df.groupby(["county_id", "year", "sector_clean"], as_index=False)
+        output_df.groupby(["county_id", "year", "bucket"], as_index=False)
         [cols_to_pivot]
         .sum()
     )
@@ -502,7 +518,7 @@ def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_
     # Pivot
     pivot_df = grouped_df.pivot_table(
         index=["county_id", "year"],
-        columns="sector_clean",
+        columns="bucket",
         values=cols_to_pivot,
         aggfunc="sum"
     )
