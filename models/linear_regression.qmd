@@ -181,14 +181,22 @@ cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
 
 per_capita_cols = [
     "real_gdp_2017_dollars_thousands",
+    "real_gdp_2017_dollars_thousands_spatial_weighted_avg_5",
     "personal_income_thousands_of_dollars",
+    "personal_income_thousands_of_dollars_spatial_weighted_avg_5",
     "all_permits",
+    "all_permits_spatial_weighted_avg_5",
     "single_family_permits",
-    "all_multifamily_permits"
-] + bus_cols
+    "single_family_permits_spatial_weighted_avg_5",
+    "all_multifamily_permits",
+    "all_multifamily_permits_spatial_weighted_avg_5"
+] + cols
 
-for col in per_capita_cols:
-    final_df[f"{col}_per_capita"] = final_df[col] / final_df["population"]
+per_capita_df = final_df[per_capita_cols].div(final_df["population"], axis=0)
+
+per_capita_df.columns = [f"{c}_per_capita" for c in per_capita_df.columns]
+
+final_df = pd.concat([final_df, per_capita_df], axis=1)
 
 final_df = final_df.drop(columns=per_capita_cols)
 ```
