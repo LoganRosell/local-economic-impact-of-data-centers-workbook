@@ -168,7 +168,7 @@ county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
 ```
 
 ```{python}
-final_df = combine_dfs(county_year_df, [air_df, pivoted_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
+final_df = combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
 ```
 
 ### Clean up final table
@@ -177,7 +177,7 @@ final_df = combine_dfs(county_year_df, [air_df, pivoted_bus_df, gdp_df, inc_df, 
 # Make applicable columns per-capita
 bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
 
-cols = [c for c in df.columns if any(l in c for l in bus_cols)]
+cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
 
 per_capita_cols = [
     "real_gdp_2017_dollars_thousands",
