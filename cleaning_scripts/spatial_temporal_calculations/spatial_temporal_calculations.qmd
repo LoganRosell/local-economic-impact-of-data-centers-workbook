@@ -66,7 +66,7 @@ dc_df = (
     .agg({"estabs": "sum"})
 )
 
-dc_df = spatial_then_yoy(dc_df, county_df, include_cols = ["estabs"], fill_type = "new_col", num_counties = 10, self_weight = 0.5) # Use own value as 0.5
+dc_df = spatial_then_yoy(dc_df, county_df, include_cols = ["estabs"], fill_type = "new_col", num_counties = 5) 
 
 dc_df = dc_df.sort_values(["county_id", "year"]).reset_index(drop=True)
 g = dc_df.groupby("county_id", dropna = False) # Just the counties for shifting
