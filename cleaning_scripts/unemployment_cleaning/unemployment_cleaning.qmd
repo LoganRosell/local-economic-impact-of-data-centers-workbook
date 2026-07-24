@@ -164,6 +164,16 @@ unemployment_means_year = df_final.groupby('year')[value_cols].mean()
 # plt.show()
 ```
 
+## Update child counties to use parent
+
+```{python}
+df_final = db_cleaning_utils.child_to_parent_county(
+    df_final, 
+    map_dict = {'46113': '46102', '12025': '12086', '24510': '24005', '29510': '29189', '32510': '32005', '46113': '46102'},
+    cols_to_avg = ["unemployment_rate"]
+    )
+```
+
 # Export to database
 
 ```{python}

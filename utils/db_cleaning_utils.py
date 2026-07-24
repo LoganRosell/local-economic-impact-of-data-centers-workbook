@@ -397,13 +397,13 @@ def child_to_parent_county(df, map_dict, cols_to_sum = "All", cols_to_avg = None
     sum_cols = []
     avg_cols = []
 
-    if not (cols_to_sum is None or cols_to_sum == "All"): # Need to do this first so I know which cols to skip in sum_cols
+    if not (cols_to_sum is None or cols_to_sum == "All"): 
         sum_cols = list(cols_to_sum)    
-    if not (cols_to_avg is None or cols_to_avg == "All"): # Need to do this first so I know which cols to skip in sum_cols
+    if not (cols_to_avg is None or cols_to_avg == "All"): 
         avg_cols = list(cols_to_avg)
 
     if cols_to_sum == "All":
-        sum_cols = [c for c in num_cols if c not in avg_cols] # How do I ensure that sum_cols 
+        sum_cols = [c for c in num_cols if c not in avg_cols] 
     elif cols_to_sum is None:
         sum_cols = []
 
