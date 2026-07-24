@@ -145,9 +145,7 @@ emp_df.to_sql(
     if_exists="replace",
     index=False
 )
-```
 
-```{python}
 dc_df.to_sql(
     "naics_518_establishments",
     con=engine,
