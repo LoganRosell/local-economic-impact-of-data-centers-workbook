@@ -78,10 +78,10 @@ dc_df["estabs_yoy_raw_diff"] = dc_df["estabs"] - dc_df["estabs_lag1"]
 dc_df["estabs_asinh_lag1"] = g["estabs_asinh"].shift(1)
 dc_df["estabs_asinh_growth"] = dc_df["estabs_asinh"] - dc_df["estabs_asinh_lag1"]
 
-dc_df["estabs_spatial_asinh"] = np.arcsinh(dc_df["estabs_spatial_weighted_avg_10"])
-dc_df["estabs_spatial_lag1"] = g["estabs_spatial_weighted_avg_10"].shift(1)
+dc_df["estabs_spatial_asinh"] = np.arcsinh(dc_df["estabs_spatial_weighted_avg_5"])
+dc_df["estabs_spatial_lag1"] = g["estabs_spatial_weighted_avg_5"].shift(1)
 dc_df["estabs_spatial_raw_diff"] = (
-    dc_df["estabs_spatial_weighted_avg_10"] - dc_df["estabs_spatial_lag1"]
+    dc_df["estabs_spatial_weighted_avg_5"] - dc_df["estabs_spatial_lag1"]
 )
 dc_df["estabs_spatial_asinh_lag1"] = g["estabs_spatial_asinh"].shift(1)
 dc_df["estabs_spatial_asinh_growth"] = (
