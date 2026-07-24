@@ -44,9 +44,14 @@ dc_df = pd.read_sql_table("naics_518_establishments", engine)
 air_df = spatial_then_yoy(air_df, county_df)
 gdp_df = spatial_then_yoy(gdp_df, county_df)
 inc_df = spatial_then_yoy(inc_df, county_df)
-perm_df = spatial_then_yoy(perm_df, county_df)
 emp_df = spatial_then_yoy(emp_df, county_df)
 bus_df = spatial_then_yoy(bus_df, county_df, key_cols = ["naics_industry_code"])
+```
+
+```{python}
+# Do spatial and year over year for construction permits (lots of 0s so too much missigness to do all columns)
+perm_df = spatial_fill(perm_df, county_df)
+perm_df = yoy_change(perm_df, include_cols = ["all_permits"])
 ```
 
 ```{python}
