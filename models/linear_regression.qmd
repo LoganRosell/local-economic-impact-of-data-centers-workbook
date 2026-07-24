@@ -22,6 +22,9 @@ from sklearn.metrics import PredictionErrorDisplay
 from scipy.stats import probplot
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import statsmodels.api as sm 
+import importlib
+import utils.db_cleaning_utils as dbu
+importlib.reload(dbu)
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -38,6 +41,7 @@ engine = create_engine(database_url)
 dc_df = pd.read_sql_table("data_centers", engine)
 air_df = pd.read_sql_table("air_quality", engine)
 bus_df = pd.read_sql_table("business_patterns", engine)
+code_df = pd.read_sql_table("naics_code_look_up", engine)
 gdp_df = pd.read_sql_table("gdp", engine)
 inc_df = pd.read_sql_table("personal_income", engine)
 pop_df = pd.read_sql_table("population", engine)
@@ -115,7 +119,7 @@ def return_specific_year(df, year):
 ### Create final table
 
 ```{python}
-grouped_bus_df = bus_df.groupby(["county_id", "year"], as_index = False).sum(numeric_only=True)
+pivoted_bus_df = dbu.pivot_naics(bus_df, code_df)
 ```
 
 ```{python}

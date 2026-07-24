@@ -422,3 +422,61 @@ def child_to_parent_county(df, map_dict, cols_to_sum = "All", cols_to_avg = None
 
     return grouped
 
+def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]):
+    """
+    Groups similar NAICS codes via shared sector names and pivots into wide format.
+    
+    Parameters:
+        bus_df = df with naics_industry_code key column
+        code_df = code lookup df
+        cols_to_pivot = list of columns to pivot 
+
+    Returns:
+        Wide DataFrame with one row per (county_id, year)
+    """
+
+    # Clean sector names
+    code_df = code_df.copy()
+    code_df["sector_clean"] = (
+        code_df["definition"]
+        .str.lower()
+        .str.replace(r"[^\w\s]", "", regex=True)
+        .str.replace(r"\s+", "_", regex=True)
+        .str.strip()
+        .str[:40]
+    )
+
+    # Merge codes and bus_df
+    output_df = bus_df.merge(code_df, left_on = "naics_industry_code", right_on = "sector", how = "left")
+
+    # Check to make sure there were no missing mappings
+    if output_df["sector_clean"].isna().any():
+        missing = output_df.loc[output_df["sector_clean"].isna(), "naics_industry_code"].unique()
+        print(f"Warning: Missing sector mappings for codes: {missing}")
+
+    grouped_df = (
+        output_df.groupby(["county_id", "year", "sector_clean"], as_index=False)
+        [cols_to_pivot]
+        .sum()
+    )
+
+    # Pivot
+    pivot_df = grouped_df.pivot_table(
+        index=["county_id", "year"],
+        columns="sector_clean",
+        values=cols_to_pivot,
+        aggfunc="sum"
+    )
+
+    pivot_df.columns = [
+        f"{metric}_{sector}" for metric, sector in pivot_df.columns
+    ]
+
+    pivot_df = pivot_df.reset_index()
+
+    return pivot_df
+
+
+
+
+
