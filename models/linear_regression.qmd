@@ -173,29 +173,17 @@ final_df = combine_dfs(county_year_df, [air_df, pivoted_bus_df, gdp_df, inc_df, 
 
 ```{python}
 # Make applicable columns per-capita
+bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
+
+cols = [c for c in df.columns if any(l in c for l in bus_cols)]
+
 per_capita_cols = [
-    "tot_employee_count",
-    "annual_payroll",
-    "tot_establishment_count",
-    "est<5",
-    "est5_9",
-    "est10_19",
-    "est20_49",
-    "est50_99",
-    "est100_249",
-    "est250_499",
-    "est500_999",
-    "est>1000",
-    "est1000_1500",
-    "est1500_2500",
-    "est2500_5000",
-    "est>5000",
     "real_gdp_2017_dollars_thousands",
     "personal_income_thousands_of_dollars",
     "all_permits",
     "single_family_permits",
     "all_multifamily_permits"
-]
+] + bus_cols
 
 for col in per_capita_cols:
     final_df[f"{col}_per_capita"] = final_df[col] / final_df["population"]
