@@ -63,7 +63,33 @@ dc_df = (
 
 dc_df = spatial_then_yoy(dc_df, county_df, include_cols = ["estabs"], fill_type = "new_col", num_counties = 10, self_weight = 0.5) # Use own value as 0.5
 
-dc_df = yoy_change(dc_df, include_cols = ["estabs_spatial_weighted_avg_10"])
+dc_df = dc_df.sort_values(["county_id", "year"]).reset_index(drop=True)
+g = dc_df.groupby("county_id", dropna = False) # Just the counties for shifting
+
+# Use asinh because it handles negatives and 0s
+dc_df["estabs_asinh"] = np.arcsinh(dc_df["estabs"])
+dc_df["estabs_lag1"] = g["estabs"].shift(1)
+dc_df["estabs_yoy_raw_diff"] = dc_df["estabs"] - dc_df["estabs_lag1"]
+dc_df["estabs_asinh_lag1"] = g["estabs_asinh"].shift(1)
+dc_df["estabs_asinh_growth"] = dc_df["estabs_asinh"] - dc_df["estabs_asinh_lag1"]
+
+dc_df["estabs_spatial_asinh"] = np.arcsinh(dc_df["estabs_spatial_weighted_avg_10"])
+dc_df["estabs_spatial_lag1"] = g["estabs_spatial_weighted_avg_10"].shift(1)
+dc_df["estabs_spatial_raw_diff"] = (
+    dc_df["estabs_spatial_weighted_avg_10"] - dc_df["estabs_spatial_lag1"]
+)
+dc_df["estabs_spatial_asinh_lag1"] = g["estabs_spatial_asinh"].shift(1)
+dc_df["estabs_spatial_asinh_growth"] = (
+    dc_df["estabs_spatial_asinh"] - dc_df["estabs_spatial_asinh_lag1"]
+)
+
+dc_df = dc_df.drop(columns=[
+    "estabs_lag1",
+    "estabs_asinh_lag1", 
+    "estabs_spatial_lag1",
+    "estabs_spatial_asinh_lag1",
+    "estabs_yoy_change"
+])
 ```
 
 ```{python}
@@ -104,6 +130,15 @@ perm_df.to_sql(
 
 emp_df.to_sql(
     "unemployment",
+    con=engine,
+    if_exists="replace",
+    index=False
+)
+```
+
+```{python}
+dc_df.to_sql(
+    "naics_518_establishments",
     con=engine,
     if_exists="replace",
     index=False
