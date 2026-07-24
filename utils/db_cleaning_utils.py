@@ -297,6 +297,45 @@ def impute_estabs_for_county(group):
 
     return group
 
+def impute_all_columns_for_county(group):
+    """
+    Impute all non-key columns for a single county:
+    - Linear interpolation for internal gaps
+    - Leading/trailing NaNs -> 0
+    - Overwrites original columns
+    """
+
+    group = group.sort_values("year").copy()
+
+    cols = [c for c in group.columns if c not in ["county_id", "year"]]
+
+    for col in cols:
+        vals = group[col]
+
+        # Interpolate internal gaps
+        vals_interp = vals.interpolate(method="linear")
+
+        # Leading NaNs -> 0
+        first_valid_idx = vals_interp.first_valid_index()
+        if first_valid_idx is not None:
+            vals_interp.loc[vals_interp.index < first_valid_idx] = 0
+        else:
+            # Entire column is NaN
+            group[col] = 0
+            continue
+
+        # Trailing NaNs -> 0
+        last_valid_idx = vals.last_valid_index()
+        vals_interp.loc[vals.index > last_valid_idx] = 0
+
+        # Optional: only round count-like columns
+        if any(x in col for x in ["count", "establishment", "employee"]):
+            vals_interp = vals_interp.round()
+
+        group[col] = vals_interp
+
+    return group
+
 def va_cities_to_parent_county(df):
     # convert fips codes for VA independent city to be parent county_id
     city_to_parent_county = {

@@ -119,7 +119,21 @@ def return_specific_year(df, year):
 ### Create final table
 
 ```{python}
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2001, year_end=2022)
+
 pivoted_bus_df = dbu.pivot_naics(bus_df, code_df)
+
+final_bus_df = bus_county_year_df.merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+
+final_bus_df = (
+    final_bus_df
+    .groupby("county_id", group_keys=False)
+    .apply(dbu.impute_all_columns_for_county)
+)
+```
+
+```{python}
+# grouped_bus_df = bus_df.groupby(["county_id", "year"], as_index = False).sum(numeric_only=True)
 ```
 
 If only one year is desired
