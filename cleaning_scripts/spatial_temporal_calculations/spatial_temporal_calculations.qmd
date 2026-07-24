@@ -66,7 +66,7 @@ dc_df = (
     .agg({"estabs": "sum"})
 )
 
-dc_df = spatial_then_yoy(dc_df, county_df, include_cols = ["estabs"], fill_type = "new_col", num_counties = 10, self_weight = 0.5) # Use own value as 0.5
+dc_df = spatial_then_yoy(dc_df, county_df, include_cols = ["estabs"], fill_type = "new_col", num_counties = 5) # Use own value as 0.5
 
 dc_df = dc_df.sort_values(["county_id", "year"]).reset_index(drop=True)
 g = dc_df.groupby("county_id", dropna = False) # Just the counties for shifting
@@ -101,6 +101,7 @@ dc_df = dc_df.drop(columns=[
 air_df.to_sql(
     "air_quality",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
@@ -108,6 +109,7 @@ air_df.to_sql(
 bus_df.to_sql(
     "business_patterns",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
@@ -115,6 +117,7 @@ bus_df.to_sql(
 gdp_df.to_sql(
     "gdp",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
@@ -122,6 +125,7 @@ gdp_df.to_sql(
 inc_df.to_sql(
     "personal_income",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
@@ -129,6 +133,7 @@ inc_df.to_sql(
 perm_df.to_sql(
     "res_construction_permits",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
@@ -136,6 +141,7 @@ perm_df.to_sql(
 emp_df.to_sql(
     "unemployment",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
@@ -145,6 +151,7 @@ emp_df.to_sql(
 dc_df.to_sql(
     "naics_518_establishments",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )
