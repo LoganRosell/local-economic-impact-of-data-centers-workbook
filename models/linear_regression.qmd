@@ -38,7 +38,7 @@ engine = create_engine(database_url)
 
 ```{python}
 # Load data
-dc_df = pd.read_sql_table("data_centers", engine)
+dc_df = pd.read_sql_table("naics_518_establishments", engine)
 air_df = pd.read_sql_table("air_quality", engine)
 bus_df = pd.read_sql_table("business_patterns", engine)
 code_df = pd.read_sql_table("naics_code_look_up", engine)
@@ -87,11 +87,11 @@ def combine_dfs(base_df, dfs_to_join):
             raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
 
         # Make sure all tables only have one row per county
-        dupes = df["county_id"][df["county_id"].duplicated()].unique()
+        dupes = df["county_id"][df[["county_id","year"]].duplicated()].unique()
         if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)}")
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id and year`. Problematic Counties: {list(dupes)}")
 
-        out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+        out_df = pd.merge(out_df, df, how = "left", on = ["county_id", "year"], validate = "one_to_one")
 
     missing_summary_table = (
         out_df.isna()
@@ -122,15 +122,16 @@ def return_specific_year(df, year):
 pivoted_bus_df = dbu.pivot_naics(bus_df, code_df)
 ```
 
+If only one year is desired
 ```{python}
-# Take 2022 of each county
-final_air_df = return_specific_year(air_df, 2022)
-final_bus_df = return_specific_year(grouped_bus_df, 2022)
-final_gdp_df = return_specific_year(gdp_df, 2022)
-final_inc_df = return_specific_year(inc_df, 2022)
-final_pop_df = return_specific_year(pop_df, 2022)
-final_perm_df = return_specific_year(perm_df, 2022)
-final_emp_df = return_specific_year(emp_df, 2022)
+# # Take 2022 of each county
+# final_air_df = return_specific_year(air_df, 2022)
+# final_bus_df = return_specific_year(grouped_bus_df, 2022)
+# final_gdp_df = return_specific_year(gdp_df, 2022)
+# final_inc_df = return_specific_year(inc_df, 2022)
+# final_pop_df = return_specific_year(pop_df, 2022)
+# final_perm_df = return_specific_year(perm_df, 2022)
+# final_emp_df = return_specific_year(emp_df, 2022)
 ```
 
 If need average again later (not currently in use):
@@ -146,20 +147,12 @@ If need average again later (not currently in use):
 ```
 
 ```{python}
-# Transform datacenter df to match pattern
-final_dc_df = (
-    dc_df.groupby("county_id")
-      .agg(data_center_count=("data_center_id", "size"))
-      .reset_index()
-)
+# Create county_year dataframe for merging below
+county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
 ```
 
 ```{python}
-final_df = combine_dfs(county_df, [final_air_df, final_bus_df, final_gdp_df, final_inc_df, final_pop_df, final_perm_df, final_emp_df, final_dc_df])
-
-final_df["data_center_count"] = final_df["data_center_count"].fillna(0)
-
-final_df
+final_df = combine_dfs(county_year_df, [air_df, pivoted_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
 ```
 
 ### Clean up final table
