@@ -16,7 +16,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from utils import db_cleaning_utils
+from utils import db_cleaning_utils as dbu
 
 load_dotenv()
 ```
@@ -141,45 +141,19 @@ We will be attributing the combined measurments for the independent city and its
 
 ```{python}
 
-va_synthetic_to_standard_mapping = {
-    '51901': '51003',
-    '51903': '51005',
-    '51907': '51015',
-    '51911': '51031',
-    '51913': '51035',
-    '51918': '51053',
-    '51919': '51059',
-    '51921': '51069',
-    '51923': '51081',
-    '51929': '51089',
-    '51931': '51095',
-    '51933': '51121',
-    '51939': '51143',
-    '51941': '51149',
-    '51942': '51153',
-    '51944': '51161',
-    '51945': '51163',
-    '51947': '51165',
-    '51949': '51175',
-    '51951': '51177',
-    '51953': '51191',
-    '51955': '51195',
-    '51958': '51199'
-}
-
-df_final["county_id"] = df_final["county_id"].replace(va_synthetic_to_standard_mapping)
-```
-
-```{python}
-# remove independent cities now that they are attributed to parent county
-va_indy_cities = ['51510', '51515', '51520', '51530', '51540', '51550', '51570', '51580', '51590', '51595', '51600', '51610', '51620', '51630', '51640', '51650', '51660', '51670', '51678', '51680', '51683', '51685', '51690', '51700', '51710', '51720', '51730', '51735', '51740', '51750', '51760', '51770', '51775', '51790', '51800', '51810', '51820', '51830', '51840']
-
-df_final = df_final[~df_final['county_id'].isin(va_indy_cities)]
+df_final = dbu.va_cities_to_parent_county(df_final)
+# aggregate all values to be average for a given county in a given year
+df_final = df_final.groupby(by=["year", "county_id"], as_index=False).sum()
 ```
 
 ```{python}
 # keep only osbservations which are in the lower 48 states and DC
-df_final = db_cleaning_utils.remove_rows_not_in_mainland_states(df_final, "county_id")
+df_final = dbu.remove_rows_not_in_mainland_states(df_final, "county_id")
+```
+
+```{python}
+# Remove non-valid Wisconsin county
+df_final = df_final[df_final["county_id"] != "55901"]
 ```
 
 
@@ -213,7 +187,7 @@ df_final.describe()
 ## Update child counties to use parent
 
 ```{python}
-df_final = db_cleaning_utils.child_to_parent_county(
+df_final = dbu.child_to_parent_county(
     df_final, 
     map_dict = {'46113': '46102', '12025': '12086', '24510': '24005', '29510': '29189', '32510': '32005', '46113': '46102'},
     cols_to_avg = ["per_capita_personal_income_dollars"]
