@@ -172,7 +172,12 @@ final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_a
 
 ```{python}
 # Rename for clarity
-final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
+final_df = final_df.rename(columns = {
+    "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
+    "estabs": "datacenters",
+    "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
+    "unemployment_rate": "unemployment_rate_pct"
+    })
 ```
 
 ## Feature Engineering
