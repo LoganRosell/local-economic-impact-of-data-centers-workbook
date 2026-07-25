@@ -178,6 +178,11 @@ final_df = final_df.rename(columns = {
     "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
     "unemployment_rate": "unemployment_rate_pct"
     })
+
+# Drop temporal columns as the regression model should be able to handle this without needing extra columns
+final_df = final_df.drop(columns = final_df.columns[final_df.columns.str.contains("yoy", case=False)])
+
+final_df = final_df.sort_values(["county_id", "year"]).reset_index(drop=True)
 ```
 
 ## Feature Engineering
