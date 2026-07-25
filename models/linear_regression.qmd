@@ -214,12 +214,12 @@ regression_cols = [
     "datacenters",
     "datacenters_spatial_weighted_avg_5",
     "datacenters_per_capita",
-    "datacenters_spatial_per_capita"
+    "datacenters_spatial_per_capita",
 
     # core controls
     "population",
     "real_gdp_2017_dollars_thousands_per_capita",
-    "personal_income_thousands_per_capita",
+    "personal_income_thousands_of_dollars_per_capita",
     "unemployment_rate_pct",
     "single_family_permits_per_capita",
     "all_multifamily_permits_per_capita",
@@ -234,7 +234,7 @@ regression_cols = [
     "tot_employee_count_professional_per_capita",
     "tot_employee_count_public_services_per_capita",
     "tot_employee_count_primary_industries_per_capita",
-    "tot_employee_count_trade_transport_per_capita",
+    "tot_employee_count_trade_transport_per_capita"
 ]
 ```
 
