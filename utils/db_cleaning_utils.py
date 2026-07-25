@@ -488,20 +488,22 @@ def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_
         "Retail Trade": "trade_transport",
         "Transportation and Warehousing": "trade_transport",
 
-        "Information": "knowledge_capital",
-        "Finance and Insurance": "knowledge_capital",
-        "Real Estate and Rental and Leasing": "knowledge_capital",
-        "Professional, Scientific, and Technical Services": "knowledge_capital",
-        "Management of Companies and Enterprises": "knowledge_capital",
+        "Information": "information",
 
-        "Administrative and Support and Waste Management and Remediation Services": "local_services_public",
-        "Educational Services": "local_services_public",
-        "Health Care and Social Assistance": "local_services_public",
-        "Arts, Entertainment, and Recreation": "local_services_public",
-        "Accommodation and Food Services": "local_services_public",
-        "Other Services (except Public Administration)": "local_services_public",
-        "Public Administration": "local_services_public",
-        "Unknown": "local_services_public",
+        "Finance and Insurance": "professional",
+        "Real Estate and Rental and Leasing": "professional",
+        "Professional, Scientific, and Technical Services": "professional",
+        "Management of Companies and Enterprises": "professional",
+
+        "Administrative and Support and Waste Management and Remediation Services": "public_services",
+        "Educational Services": "public_services",
+        "Health Care and Social Assistance": "public_services",
+        "Arts, Entertainment, and Recreation": "public_services",
+        "Accommodation and Food Services": "public_services",
+        "Other Services (except Public Administration)": "public_services",
+        "Public Administration": "public_services",
+        
+        "Unknown": "unknown",
     }
     
     code_df["bucket"] = code_df["definition"].map(bucket_map)
