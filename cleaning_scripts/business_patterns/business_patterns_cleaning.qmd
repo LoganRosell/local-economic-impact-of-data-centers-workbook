@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 from dotenv import load_dotenv
+import importlib
 from sqlalchemy import create_engine
 import utils.db_cleaning_utils as dbu
 importlib.reload(dbu)
@@ -242,6 +243,7 @@ data_dir = Path(os.environ["DATA_DIR"])
 # main loop
 list_of_df = []
 
+
 for y in np.arange(1,23):
 
     file_number = str(y).zfill(2)
@@ -260,6 +262,11 @@ for y in np.arange(1,23):
     df_raw = est_cols_to_numeric(df_raw)
     df_raw = roll_up_va_cities_to_county(df_raw)
     df_raw = dbu.remove_rows_not_in_mainland_states(df_raw, "county_id")
+    df_raw = dbu.child_to_parent_county(
+        df_raw, 
+        map_dict = {'46113': '46102', '12025': '12086', '24510': '24005', '29510': '29189', '32510': '32005', '46113': '46102'}, 
+        extra_keys = ["naics_industry_code"]
+        )
 
     list_of_df.append(df_raw)
 

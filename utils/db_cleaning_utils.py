@@ -311,6 +311,45 @@ def impute_estabs_for_county(group):
 
     return group
 
+def impute_all_columns_for_county(group):
+    """
+    Impute all non-key columns for a single county:
+    - Linear interpolation for internal gaps
+    - Leading/trailing NaNs -> 0
+    - Overwrites original columns
+    """
+
+    group = group.sort_values("year").copy()
+
+    cols = [c for c in group.columns if c not in ["county_id", "year"]]
+
+    for col in cols:
+        vals = group[col]
+
+        # Interpolate internal gaps
+        vals_interp = vals.interpolate(method="linear")
+
+        # Leading NaNs -> 0
+        first_valid_idx = vals_interp.first_valid_index()
+        if first_valid_idx is not None:
+            vals_interp.loc[vals_interp.index < first_valid_idx] = 0
+        else:
+            # Entire column is NaN
+            group[col] = 0
+            continue
+
+        # Trailing NaNs -> 0
+        last_valid_idx = vals.last_valid_index()
+        vals_interp.loc[vals.index > last_valid_idx] = 0
+
+        # Optional: only round count-like columns
+        if any(x in col for x in ["count", "establishment", "employee"]):
+            vals_interp = vals_interp.round()
+
+        group[col] = vals_interp
+
+    return group
+
 def va_cities_to_parent_county(df):
     # convert fips codes for VA independent city to be parent county_id
     city_to_parent_county = {
@@ -382,3 +421,133 @@ def va_cities_to_parent_county(df):
     df["county_id"] = df["county_id"].replace(city_to_parent_county)
     
     return df
+
+def child_to_parent_county(df, map_dict, cols_to_sum = "All", cols_to_avg = None, extra_keys = None):
+    """
+    Maps child counties/cities to parent counties, then aggregates rows
+    by summing or averaging specified columns.
+
+    Parameters:
+        df: DataFrame containing at least 'county_id' and 'year'
+        map_dict: dict of {independent_city_code: parent_county_code}
+        cols_to_sum: "All" to sum all numeric columns (except those in cols_to_avg), or list of column names to sum; or None for no sums.
+        cols_to_avg: None for no averages, "All" to average all numeric columns (except those in cols_to_sum), or list of column names to average.
+        extra_keys: list of extra key columns beyond 'county_id' and 'year'
+    """
+    extra_keys = extra_keys or []
+    
+    assert not (cols_to_sum == "All" and cols_to_avg == "All"), "cols_to_sum and cols_to_avg cannot both be 'All'."
+    assert (cols_to_sum == "All" or cols_to_avg == "All"), "Either cols_to_sum or cols_to_avg must be 'All'"
+
+    key_cols = ["county_id", "year"] + extra_keys
+
+    df = df.copy()
+    df["county_id"] = df["county_id"].replace(map_dict)
+
+    num_cols = df.select_dtypes(include="number").columns.tolist()
+    num_cols = [c for c in num_cols if c not in key_cols]
+
+    sum_cols = []
+    avg_cols = []
+
+    if not (cols_to_sum is None or cols_to_sum == "All"): 
+        sum_cols = list(cols_to_sum)    
+    if not (cols_to_avg is None or cols_to_avg == "All"): 
+        avg_cols = list(cols_to_avg)
+
+    if cols_to_sum == "All":
+        sum_cols = [c for c in num_cols if c not in avg_cols] 
+    elif cols_to_sum is None:
+        sum_cols = []
+
+    if cols_to_avg == "All":
+        avg_cols = [c for c in num_cols if c not in sum_cols]
+    elif cols_to_avg is None:
+        avg_cols = []
+
+    agg_dict = {}
+    for c in sum_cols:
+        agg_dict[c] = "sum"
+    for c in avg_cols:
+        agg_dict[c] = "mean"
+
+    grouped = df.groupby(key_cols, as_index=False).agg(agg_dict)
+
+    return grouped
+
+def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]):
+    """
+    Groups similar NAICS codes via shared sector names and pivots into wide format.
+    
+    Parameters:
+        bus_df = df with naics_industry_code key column
+        code_df = code lookup df
+        cols_to_pivot = list of columns to pivot 
+
+    Returns:
+        Wide DataFrame with one row per (county_id, year)
+    """
+
+    # Clean sector names
+    code_df = code_df.copy()
+    bucket_map = {
+        "Agriculture, Forestry, Fishing and Hunting": "primary_industries",
+        "Mining, Quarrying, and Oil and Gas Extraction": "primary_industries",
+        "Utilities": "primary_industries",
+
+        "Construction": "industrial",
+        "Manufacturing": "industrial",
+
+        "Wholesale Trade": "trade_transport",
+        "Retail Trade": "trade_transport",
+        "Transportation and Warehousing": "trade_transport",
+
+        "Information": "information",
+
+        "Finance and Insurance": "professional",
+        "Real Estate and Rental and Leasing": "professional",
+        "Professional, Scientific, and Technical Services": "professional",
+        "Management of Companies and Enterprises": "professional",
+
+        "Administrative and Support and Waste Management and Remediation Services": "public_services",
+        "Educational Services": "public_services",
+        "Health Care and Social Assistance": "public_services",
+        "Arts, Entertainment, and Recreation": "public_services",
+        "Accommodation and Food Services": "public_services",
+        "Other Services (except Public Administration)": "public_services",
+        "Public Administration": "public_services",
+        
+        "Unknown": "unknown",
+    }
+    
+    code_df["bucket"] = code_df["definition"].map(bucket_map)
+
+    # Merge codes and bus_df
+    output_df = bus_df.merge(code_df, left_on = "naics_industry_code", right_on = "sector", how = "left")
+
+    grouped_df = (
+        output_df.groupby(["county_id", "year", "bucket"], as_index=False)
+        [cols_to_pivot]
+        .sum()
+    )
+
+    # Pivot
+    pivot_df = grouped_df.pivot_table(
+        index=["county_id", "year"],
+        columns="bucket",
+        values=cols_to_pivot,
+        aggfunc="sum"
+    )
+
+    pivot_df.columns = [
+        f"{metric}_{sector}" for metric, sector in pivot_df.columns
+    ]
+
+    pivot_df = pivot_df.reset_index()
+
+    return pivot_df
+
+
+
+
+

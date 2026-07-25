@@ -15,6 +15,7 @@ import seaborn as sns
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+import importlib
 import utils.db_cleaning_utils as dbu
 importlib.reload(dbu)
 
@@ -193,6 +194,16 @@ df_final.describe()
 # plt.yticks(rotation=45)
 
 # plt.show()
+```
+
+## Update child counties to use parent
+
+```{python}
+df_final = dbu.child_to_parent_county(
+    df_final, 
+    map_dict = {'46113': '46102', '12025': '12086', '24510': '24005', '29510': '29189', '32510': '32005', '46113': '46102'},
+    cols_to_avg = ["quantity_index_gdp"]
+    )
 ```
 
 # Export to database
