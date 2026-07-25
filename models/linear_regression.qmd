@@ -276,21 +276,36 @@ def run_lasso(df, y_col):
 ### Regression Function
 
 ```{python}
-def run_linear_regression(df, y_col, x_cols):
-    all_cols = [y_col] + x_cols
-    reg_df = df[all_cols].dropna().copy()
+def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
 
-    X = reg_df[x_cols]
-    y = reg_df[y_col]
+    needed_cols = [y_col] + x_cols
+    if county_fe:
+        needed_cols.append("county_id")
+    if year_fe:
+        needed_cols.append("year")
 
-    X = sm.add_constant(X)
+    needed_cols = list(dict.fromkeys(needed_cols))
+    reg_df = df[needed_cols].dropna().copy()
 
-    # Linear Regression Model
-    model = sm.OLS(y, X).fit()
+    rhs_terms = x_cols.copy()
+    if county_fe:
+        rhs_terms.append("C(county_id)")
+    if year_fe:
+        rhs_terms.append("C(year)")
+
+    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
+
+    model = smf.ols(formula=formula, data=reg_df).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": reg_df["county_id"]}
+        )
 
     fitted = model.fittedvalues
     resid = model.resid
 
+    print("Formula:")
+    print(formula)
+    print("\n")
     print(model.summary())
 
     # Examine Residuals
@@ -309,11 +324,14 @@ def run_linear_regression(df, y_col, x_cols):
     plt.show()
 
     # Check VIF
+    vif_X = reg_df[x_cols].copy()
+    vif_X = sm.add_constant(vif_X, has_constant="add")
+
     vif_df = pd.DataFrame({
-        "variable": X.columns,
+        "variable": vif_X.columns,
         "vif": [
-            np.nan if col == "const" else variance_inflation_factor(X.values, i)
-            for i, col in enumerate(X.columns)
+            np.nan if col == "const" else variance_inflation_factor(vif_X.values, i)
+            for i, col in enumerate(vif_X.columns)
         ]
     })
 
