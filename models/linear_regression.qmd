@@ -11,17 +11,18 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-import subprocess
-import sys
-from skimpy import skim
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from scipy.stats import pearsonr
-from sklearn.metrics import PredictionErrorDisplay
 from scipy.stats import probplot
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import statsmodels.api as sm 
+import importlib
+import utils.db_cleaning_utils as dbu
+importlib.reload(dbu)
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LassoCV
+from sklearn.pipeline import make_pipeline
+import statsmodels.formula.api as smf
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -35,14 +36,15 @@ engine = create_engine(database_url)
 
 ```{python}
 # Load data
-dc_df = pd.read_sql_table("data_centers", engine)
-air_df = pd.read_sql_table("air_quality", engine)
-bus_df = pd.read_sql_table("business_patterns", engine)
-gdp_df = pd.read_sql_table("gdp", engine)
-inc_df = pd.read_sql_table("personal_income", engine)
+dc_df = pd.read_sql_table("naics_518_establishments", engine, schema="transformed")
+air_df = pd.read_sql_table("air_quality", engine, schema="transformed")
+bus_df = pd.read_sql_table("business_patterns", engine, schema="transformed")
+code_df = pd.read_sql_table("naics_code_look_up", engine)
+gdp_df = pd.read_sql_table("gdp", engine, schema="transformed")
+inc_df = pd.read_sql_table("personal_income", engine, schema="transformed")
 pop_df = pd.read_sql_table("population", engine)
-perm_df = pd.read_sql_table("res_construction_permits", engine)
-emp_df = pd.read_sql_table("unemployment", engine)
+perm_df = pd.read_sql_table("res_construction_permits", engine, schema="transformed")
+emp_df = pd.read_sql_table("unemployment", engine, schema="transformed")
 county_df = pd.read_sql_table("us_counties", engine)
 ```
 
@@ -83,11 +85,11 @@ def combine_dfs(base_df, dfs_to_join):
             raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
 
         # Make sure all tables only have one row per county
-        dupes = df["county_id"][df["county_id"].duplicated()].unique()
+        dupes = df["county_id"][df[["county_id","year"]].duplicated()].unique()
         if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)}")
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id and year`. Problematic Counties: {list(dupes)}")
 
-        out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+        out_df = pd.merge(out_df, df, how = "left", on = ["county_id", "year"], validate = "one_to_one")
 
     missing_summary_table = (
         out_df.isna()
@@ -103,125 +105,205 @@ def combine_dfs(base_df, dfs_to_join):
     return out_df
 ```
 
-```{python}
-def return_specific_year(df, year):
-    assert"year" in df.columns, "data frame does not have a year column"
-    year = int(year)
-    sliced_df = df[df["year"]==year]
-    sliced_df = sliced_df.drop(columns = ["year"])
-    return sliced_df
-```
-
 ### Create final table
 
 ```{python}
-grouped_bus_df = bus_df.groupby(["county_id", "year"], as_index = False).sum(numeric_only=True)
-```
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2001, year_end=2022)
 
-```{python}
-# Take 2022 of each county
-final_air_df = return_specific_year(air_df, 2022)
-final_bus_df = return_specific_year(grouped_bus_df, 2022)
-final_gdp_df = return_specific_year(gdp_df, 2022)
-final_inc_df = return_specific_year(inc_df, 2022)
-final_pop_df = return_specific_year(pop_df, 2022)
-final_perm_df = return_specific_year(perm_df, 2022)
-final_emp_df = return_specific_year(emp_df, 2022)
-```
+pivoted_bus_df = dbu.pivot_naics(bus_df, code_df)
 
-If need average again later (not currently in use):
-```{python}
-# # Average all necessary dfs by county
-# final_air_df = county_average(air_df, include_cols = ["pm25_mean_daily_avg"])
-# final_bus_df = county_average(grouped_bus_df, include_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"])
-# final_gdp_df = county_average(gdp_df, include_cols = ["real_gdp_2017_dollars_thousands", "quantity_index_gdp"])
-# final_inc_df = county_average(inc_df, include_cols = ["personal_income_thousands_of_dollars"])
-# final_pop_df = county_average(pop_df, include_cols = ["population"])
-# final_perm_df = county_average(perm_df, include_cols = ["all_permits", "single_family_permits", "all_multifamily_permits"])
-# final_emp_df = county_average(emp_df, include_cols = ["unemployment_rate"])
-```
+final_bus_df = bus_county_year_df.merge(pivoted_bus_df, on=["county_id", "year"], how="left")
 
-```{python}
-# Transform datacenter df to match pattern
-final_dc_df = (
-    dc_df.groupby("county_id")
-      .agg(data_center_count=("data_center_id", "size"))
-      .reset_index()
+final_bus_df = (
+    final_bus_df
+    .groupby("county_id", group_keys=False)
+    .apply(dbu.impute_all_columns_for_county)
 )
+
+final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
 ```
 
 ```{python}
-final_df = combine_dfs(county_df, [final_air_df, final_bus_df, final_gdp_df, final_inc_df, final_pop_df, final_perm_df, final_emp_df, final_dc_df])
+# Create county_year dataframe for merging below
+county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+```
 
-final_df["data_center_count"] = final_df["data_center_count"].fillna(0)
-
-final_df
+```{python}
+final_df = combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
 ```
 
 ### Clean up final table
 
 ```{python}
 # Make applicable columns per-capita
-per_capita_cols = [
-    "tot_employee_count",
-    "annual_payroll",
-    "tot_establishment_count",
-    "est<5",
-    "est5_9",
-    "est10_19",
-    "est20_49",
-    "est50_99",
-    "est100_249",
-    "est250_499",
-    "est500_999",
-    "est>1000",
-    "est1000_1500",
-    "est1500_2500",
-    "est2500_5000",
-    "est>5000",
-    "real_gdp_2017_dollars_thousands",
-    "personal_income_thousands_of_dollars",
-    "all_permits",
-    "single_family_permits",
-    "all_multifamily_permits"
-]
+bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
 
-for col in per_capita_cols:
-    final_df[f"{col}_per_capita"] = final_df[col] / final_df["population"]
+cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
+
+per_capita_cols = [
+    "real_gdp_2017_dollars_thousands",
+    "real_gdp_2017_dollars_thousands_spatial_weighted_avg_5",
+    "personal_income_thousands_of_dollars",
+    "personal_income_thousands_of_dollars_spatial_weighted_avg_5",
+    "all_permits",
+    "all_permits_spatial_weighted_avg_5",
+    "single_family_permits",
+    "single_family_permits_spatial_weighted_avg_5",
+    "all_multifamily_permits",
+    "all_multifamily_permits_spatial_weighted_avg_5"
+] + cols
+
+per_capita_df = final_df[per_capita_cols].div(final_df["population"], axis=0)
+
+per_capita_df.columns = [f"{c}_per_capita" for c in per_capita_df.columns]
+
+final_df = pd.concat([final_df, per_capita_df], axis=1)
 
 final_df = final_df.drop(columns=per_capita_cols)
 ```
 
 ```{python}
-# Put business size columns in a list together since they should always be used together
-business_size_cols = ["est<5_per_capita", "est5_9_per_capita", "est10_19_per_capita", "est20_49_per_capita", "est50_99_per_capita", "est100_249_per_capita", "est250_499_per_capita", "est500_999_per_capita", "est1000_1500_per_capita", "est1500_2500_per_capita", "est2500_5000_per_capita", "est>5000_per_capita"]
+# Per-capita data centers (don't drop original though)
+final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
+final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
 ```
 
 ```{python}
 # Rename for clarity
-final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
+final_df = final_df.rename(columns = {
+    "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
+    "estabs": "datacenters",
+    "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
+    "unemployment_rate": "unemployment_rate_pct"
+    })
+
+# Drop temporal columns as the regression model should be able to handle this without needing extra columns
+final_df = final_df.drop(columns = final_df.columns[final_df.columns.str.contains("yoy", case=False)])
+
+final_df = final_df.sort_values(["county_id", "year"]).reset_index(drop=True)
+```
+
+## Feature Engineering
+
+### EDA
+
+#### Find Columns that are still skewed
+```{python}
+num_df = final_df.select_dtypes(include="number").copy()
+
+eda_summary = pd.DataFrame({
+    "missing_share": num_df.isna().mean(),
+    "n_unique": num_df.nunique(),
+    "std": num_df.std(numeric_only=True),
+    "skew": num_df.skew(numeric_only=True),
+}).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
+
+eda_summary
+```
+
+### Select Columns for final regressions
+
+```{python}
+regression_cols = [
+    "county_id",
+    "year",
+
+    # treatment
+    "datacenters",
+    "datacenters_spatial_weighted_avg_5",
+    "datacenters_per_capita",
+    "datacenters_spatial_per_capita",
+
+    # core controls
+    "population",
+    "real_gdp_2017_dollars_thousands_per_capita",
+    "personal_income_thousands_of_dollars_per_capita",
+    "unemployment_rate_pct",
+    "single_family_permits_per_capita",
+    "all_multifamily_permits_per_capita",
+
+    # environmental
+    "pm25_mean_daily_avg",
+    "pm25_mean_daily_avg_spatial_weighted_avg_5",
+
+    # business sectors
+    "tot_employee_count_industrial_per_capita",
+    "tot_employee_count_information_per_capita",
+    "tot_employee_count_professional_per_capita",
+    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_primary_industries_per_capita",
+    "tot_employee_count_trade_transport_per_capita"
+]
+
+regression_df = final_df[regression_cols].copy()
 ```
 
 ## Linear Regressions
 
+### Lasso Function
+
+```{python}
+def run_lasso(df, y_col):
+    target_col = y_col
+    drop_cols = ["county_id", "year", target_col]
+
+    lasso_df = df.dropna().copy()
+    lasso_df.columns = lasso_df.columns.map(str)
+
+    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
+    
+    X = lasso_df[x_cols]
+    y = lasso_df[target_col]
+
+    lasso_pipe = make_pipeline(
+        StandardScaler(),
+        LassoCV(cv = 5, random_state = 15215, max_iter = 10000)
+    )
+
+    lasso_pipe.fit(X, y)
+
+    lasso_model = lasso_pipe.named_steps["lassocv"]
+    coef_df = pd.DataFrame({
+        "feature": x_cols,
+        "coef": lasso_model.coef_
+    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
+
+    print(coef_df.to_string(index=False))
+```
+
 ### Regression Function
 
 ```{python}
-def run_linear_regression(df, y_col, x_cols):
-    all_cols = [y_col] + x_cols
-    reg_df = df[all_cols].dropna().copy()
+def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
 
-    X = reg_df[x_cols]
-    y = reg_df[y_col]
+    needed_cols = [y_col] + x_cols
+    if county_fe:
+        needed_cols.append("county_id")
+    if year_fe:
+        needed_cols.append("year")
 
-    X = sm.add_constant(X)
+    needed_cols = list(dict.fromkeys(needed_cols))
+    reg_df = df[needed_cols].dropna().copy()
 
-    # Linear Regression Model
-    model = sm.OLS(y, X).fit()
+    rhs_terms = x_cols.copy()
+    if county_fe:
+        rhs_terms.append("C(county_id)")
+    if year_fe:
+        rhs_terms.append("C(year)")
+
+    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
+
+    model = smf.ols(formula=formula, data=reg_df).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": reg_df["county_id"]}
+        )
 
     fitted = model.fittedvalues
     resid = model.resid
 
+    print("Formula:")
+    print(formula)
+    print("\n")
     print(model.summary())
 
     # Examine Residuals
@@ -240,11 +322,14 @@ def run_linear_regression(df, y_col, x_cols):
     plt.show()
 
     # Check VIF
+    vif_X = reg_df[x_cols].copy()
+    vif_X = sm.add_constant(vif_X, has_constant="add")
+
     vif_df = pd.DataFrame({
-        "variable": X.columns,
+        "variable": vif_X.columns,
         "vif": [
-            np.nan if col == "const" else variance_inflation_factor(X.values, i)
-            for i, col in enumerate(X.columns)
+            np.nan if col == "const" else variance_inflation_factor(vif_X.values, i)
+            for i, col in enumerate(vif_X.columns)
         ]
     })
 
@@ -255,73 +340,25 @@ def run_linear_regression(df, y_col, x_cols):
 
 ### Regressions and Analysis
 
-#### Air Quality
-
+#### Unemployment
 ```{python}
-run_linear_regression(final_df, "pm25_mean_daily_avg", ["data_center_count", "population", "real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita", "all_permits_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
+run_lasso(regression_df, "unemployment_rate_pct")
 ```
 
-Air Quality Analysis: 
-
-* Overall Adj. R-squared of the model is 0.349
-* Data centers have a high p-value and thus are not statistically significant in this model
-* The residuals are not closely centered on 0, and seem to form a vertical band towards the middle of the x-axis, indicating heteroskedasticity. Additionally, there are several major outliers.
-* The Q-Q plot indicates approximate normality in the center, but there are some departures from normality towards the tails
-* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
-
-#### GDP Index
-
 ```{python}
-run_linear_regression(final_df, "quantity_index_gdp", ["data_center_count", "population", "unemployment_rate", "tot_employee_count_per_capita", "personal_income_thousands_of_dollars_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
+run_linear_regression(regression_df, "unemployment_rate_pct", [
+    "pm25_mean_daily_avg",
+    "personal_income_thousands_of_dollars_per_capita",
+    "tot_employee_count_industrial_per_capita",
+    "tot_employee_count_trade_transport_per_capita",
+    "tot_employee_count_public_services_per_capita",
+    "single_family_permits_per_capita",
+    "real_gdp_2017_dollars_thousands_per_capita",
+    "datacenters_spatial_weighted_avg_5",
+    "datacenters",
+    "population",
+    "tot_employee_count_primary_industries_per_capita",
+    "tot_employee_count_information_per_capita",
+    "tot_employee_count_professional_per_capita"
+    ])
 ```
-
-GDP Index Analysis:
-
-* Overall Adj. R-squared of the model is 0.045
-* Data centers have a high p-value and thus are not statistically significant in this model
-* Residuals are densely clustered around a single point indicating heteroskedasticity, and there are very high outliers
-* The Q-Q plot shows strong departures from normality
-* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
-
-
-#### Unemployment Rate
-
-```{python}
-run_linear_regression(final_df, "unemployment_rate", ["data_center_count", "population", "personal_income_thousands_of_dollars_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
-```
-
-Unemployment Rate Analysis:
-
-* Overall Adj. R-squared of the model is 0.179
-* Data centers have a high p-value and thus are not statistically significant in this model
-* Residuals form a V-shaped pattern indicating heteroskedasticity, and there are very high outliers
-* The Q-Q plot shows strong departures from normality on the top quantile
-* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
-
-#### Establishment Count Per Capita
-
-```{python}
-run_linear_regression(final_df, "tot_establishment_count_per_capita", ["data_center_count", "population", "tot_employee_count_per_capita", "real_gdp_2017_dollars_thousands_per_capita", "all_permits_per_capita", "land_area_sqmi", "water_area_sqmi"])
-```
-
-Establishment Analysis:
-
-* Overall Adj. R-squared of the model is 0.375
-* Data centers have a high p-value and thus are not statistically significant in this model
-* Residuals form a clustered shape around the middle indicating heteroskedasticity, and there are very high outliers
-* The Q-Q plot shows strong departures from normality on both ends
-* All VIFs are very low, so there is not high multicollinearity
-
-#### Residential Construction Permits
-
-```{python}
-run_linear_regression(final_df, "all_permits_per_capita", ["data_center_count", "population", "pm25_mean_daily_avg", "unemployment_rate","real_gdp_2017_dollars_thousands_per_capita", "personal_income_thousands_of_dollars_per_capita", "land_area_sqmi", "water_area_sqmi"] + business_size_cols)
-```
-
-Establishment Analysis:
-
-* Overall Adj. R-squared of the model is 0.126
-* Data centers have a p-value of 0.119 and thus are not statistically significant at the 0.05 level
-* Residuals form a clustered wedge shape indicating heteroskedasticity, and there are some large outliers
-* The Q-Q plot shows strong departures from normality on the upper tail, but is relatively normally distributed towards the bottom and middle
-* Most VIFs are low, other than some of the business size metrics which get up to a VIF of 5, so multicollinearity is a moderate concern here.
