@@ -134,6 +134,10 @@ for file_year in np.arange(2004,2026):
     df_raw = dbu.remove_rows_not_in_mainland_states(df_raw, "county_id")
     df_raw = dbu.remove_new_ct_fips_codes(df_raw)
     df_raw = dbu.va_cities_to_parent_county(df_raw)
+    df_raw = dbu.child_to_parent_county(
+        df_raw, 
+        map_dict = {'24510': '24005', '29510': '29189', '32510': '32005'}
+        )
 
     list_of_df.append(df_raw)
 
