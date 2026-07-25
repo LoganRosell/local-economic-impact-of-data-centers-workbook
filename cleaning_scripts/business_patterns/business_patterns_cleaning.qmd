@@ -267,6 +267,7 @@ for y in np.arange(1,23):
         map_dict = {'46113': '46102', '12025': '12086', '24510': '24005', '29510': '29189', '32510': '32005', '46113': '46102'}, 
         extra_keys = ["naics_industry_code"]
         )
+    df_raw = dbu.remove_new_ct_fips_codes(df_raw)
 
     list_of_df.append(df_raw)
 

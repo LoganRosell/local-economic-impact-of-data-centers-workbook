@@ -220,6 +220,11 @@ df_final = db_cleaning_utils.child_to_parent_county(
     )
 ```
 
+```{python}
+# remove new fips county codes in CT
+df_final = dbu.remove_new_ct_fips_codes(df_final)
+```
+
 # Export to database
 
 ```{python}
