@@ -341,3 +341,26 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
 ```
 
 ### Regressions and Analysis
+
+#### Unemployment
+```{python}
+run_lasso(regression_df, "unemployment_rate_pct")
+```
+
+```{python}
+run_linear_regression(regression_df, "unemployment_rate_pct", [
+    "pm25_mean_daily_avg",
+    "personal_income_thousands_of_dollars_per_capita",
+    "tot_employee_count_industrial_per_capita",
+    "tot_employee_count_trade_transport_per_capita",
+    "tot_employee_count_public_services_per_capita",
+    "single_family_permits_per_capita",
+    "real_gdp_2017_dollars_thousands_per_capita",
+    "datacenters_spatial_weighted_avg_5",
+    "datacenters",
+    "population",
+    "tot_employee_count_primary_industries_per_capita",
+    "tot_employee_count_information_per_capita",
+    "tot_employee_count_professional_per_capita"
+    ])
+```
