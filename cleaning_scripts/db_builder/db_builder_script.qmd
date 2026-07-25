@@ -5,12 +5,22 @@ author: Logan Rosell
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import subprocess
 import sys
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
+
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+
+# ensure schema exists
+schema_name = "transformed" 
+with engine.connect() as conn:
+    conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}";'))
+    conn.commit()
 ```
 
 ```{python}
