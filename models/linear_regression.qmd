@@ -236,9 +236,42 @@ regression_cols = [
     "tot_employee_count_primary_industries_per_capita",
     "tot_employee_count_trade_transport_per_capita"
 ]
+
+regression_df = final_df[regression_cols].copy()
 ```
 
 ## Linear Regressions
+
+### Lasso Function
+
+```{python}
+def run_lasso(df, y_col):
+    target_col = y_col
+    drop_cols = ["county_id", "year", target_col]
+
+    lasso_df = df.dropna().copy()
+    lasso_df.columns = lasso_df.columns.map(str)
+
+    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
+    
+    X = lasso_df[x_cols]
+    y = lasso_df[target_col]
+
+    lasso_pipe = make_pipeline(
+        StandardScaler(),
+        LassoCV(cv = 5, random_state = 15215, max_iter = 10000)
+    )
+
+    lasso_pipe.fit(X, y)
+
+    lasso_model = lasso_pipe.named_steps["lassocv"]
+    coef_df = pd.DataFrame({
+        "feature": x_cols,
+        "coef": lasso_model.coef_
+    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
+
+    print(coef_df.to_string(index=False))
+```
 
 ### Regression Function
 
