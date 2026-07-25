@@ -165,6 +165,12 @@ final_df = final_df.drop(columns=per_capita_cols)
 ```
 
 ```{python}
+# Per-capita data centers (don't drop original though)
+final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
+final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
+```
+
+```{python}
 # Rename for clarity
 final_df = final_df.rename(columns = {"annual_payroll_per_capita": "annual_payroll_thousands_per_capita"})
 ```
