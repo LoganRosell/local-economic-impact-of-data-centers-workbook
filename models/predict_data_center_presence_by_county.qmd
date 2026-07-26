@@ -219,6 +219,7 @@ non_dc_counties["has_dc"] = "yes"
 
 comparing_df = pd.concat([dc_counties, non_dc_counties], axis=0)
 comparing_df = comparing_df.reset_index().rename(columns={"index": "feature"})
+comparing_df = comparing_df.drop(columns=["feature"])
 
 feature_list = comparing_df.columns
 
@@ -327,6 +328,11 @@ independent_x_vars_df = independent_x_vars_df.drop(columns = [
        'est1000_1500_per_capita', 'est1500_2500_per_capita',
        'est2500_5000_per_capita', 'est>5000_per_capita'
     ])
+```
+
+```{python}
+# drop rows with NAs so modeling works
+independent_x_vars_df = independent_x_vars_df.dropna()
 ```
 
 ```{python}
