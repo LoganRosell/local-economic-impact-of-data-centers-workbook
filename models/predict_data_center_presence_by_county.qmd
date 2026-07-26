@@ -61,7 +61,7 @@ def load_table(table_name, engine):
     return df
 
 
-dc_df = load_table("data_centers", engine)
+dc_df = load_table("naics_518_establishments", engine)
 air_df = load_table("air_quality", engine)
 bus_df = load_table("business_patterns", engine)
 gdp_df = load_table("gdp", engine)
@@ -118,7 +118,7 @@ def return_specific_year(df, year):
 ```{python}
 # keep only 2022 (closest to when we know data center counts to be true)
 
-df_with_years = [air_df, bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df]
+df_with_years = [dc_df, air_df, bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df]
 
 dfs_only_2022 = [return_specific_year(x, 2022) for x in df_with_years]
 
@@ -128,21 +128,22 @@ dfs_only_2022 = [return_specific_year(x, 2022) for x in df_with_years]
 ```{python}
 # Aggregate all industry codes per county into one summed row
 
-dfs_only_2022[1] = dfs_only_2022[1].groupby(
+dfs_only_2022[2] = dfs_only_2022[2].groupby(
     ["county_id"],
     as_index=False
     ).sum()
 
-dfs_only_2022[1] = dfs_only_2022[1].drop(columns = ["naics_industry_code"])
+dfs_only_2022[2] = dfs_only_2022[2].drop(columns = ["naics_industry_code"])
 ```
 
 ```{python}
 # Add column to county_df which indicates the presence of one or more data centers in a county
-counties_with_dc = dc_df["county_id"].unique()
+dc_df_2022 = dfs_only_2022[0]
+
+counties_with_dc = dc_df_2022["county_id"].unique()
 
 county_df["has_datacenter"] = county_df["county_id"].isin(counties_with_dc).astype(int)
 county_df = county_df[[
-    #"state",
     "county_id",
     "has_datacenter"
     ]]
@@ -269,6 +270,8 @@ reject, p_corrected, _, _ = multipletests(results_df["p_value"], alpha=0.05, met
 results_df["p_adjusted"] = p_corrected
 results_df["is_significant"] = reject
 results_df = results_df.sort_values(by="p_adjusted")
+
+print(results_df)
 ```
 
 ## Check Model Assumptions
