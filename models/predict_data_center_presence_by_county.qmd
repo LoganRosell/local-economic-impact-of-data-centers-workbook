@@ -145,7 +145,11 @@ counties_with_dc = dc_df_2022["county_id"].unique()
 county_df["has_datacenter"] = county_df["county_id"].isin(counties_with_dc).astype(int)
 county_df = county_df[[
     "county_id",
-    "has_datacenter"
+    "has_datacenter",
+    "centroid_lon",
+    "centroid_lat",
+    "land_area_sqmi",
+    "water_area_sqmi"
     ]]
 ```
 
