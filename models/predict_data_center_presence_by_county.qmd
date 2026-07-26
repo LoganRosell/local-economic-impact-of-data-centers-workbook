@@ -4,7 +4,7 @@ author: Logan Rosell
 ---
 
 ## Goal
-To get a sense of how predictive each of our available x variables are of whether a county does or does not have data centers we will create a simple Logistic Regression model including all variables. While we do know which counties have data centers in them as of 2023, we do not know what year any specific county started having data centers. We also cannot be sure that counties which are not included in the list of those with data centers in 2023 did not previously have a data center at some point during our analysis window which was closed down before 2023 and thus not included in our list of counties with data centers. 
+To get a sense of how predictive each of our available x variables are of whether a county does or does not have data centers we will create a simple Logistic Regression model including all variables. 
 
 
 
