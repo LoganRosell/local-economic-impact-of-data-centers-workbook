@@ -16,6 +16,9 @@ import matplotlib.pyplot as plt
 import json
 import urllib.request
 import plotly.graph_objects as go
+import utils.map_utils as mu
+import importlib
+importlib.reload(mu)
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -30,7 +33,6 @@ engine = create_engine(database_url)
 ```{python}
 # Load data
 df = pd.read_sql_table("gdp", engine)
-df.columns = ["county_id", "gdp_thous_'17_$", "gdp_thous_curr_$", "quant_index_gdp", "year"]
 cols = df.columns
 ```
 
@@ -79,60 +81,6 @@ with open(geojson_path, "r") as f:
     counties_geojson = json.load(f)
 ```
 
-
-```{python}
-# define map layout function
-def apply_map_layout_and_controls(fig, title_text, years):
-    """
-    Applies the carto-positron map style, playback menus, and time sliders
-    to an existing Plotly animation figure.
-    """
-    fig.update_layout(
-        title=title_text,
-        map=dict(
-            style="carto-positron",
-            center=dict(lat=37.8, lon=-96),
-            zoom=2
-        ),
-        margin=dict(l=0, r=0, t=50, b=0),
-        updatemenus=[
-            dict(
-                type="buttons",
-                showactive=False,
-                x=0.05,
-                y=0.95,
-                buttons=[
-                    dict(
-                        label="Play",
-                        method="animate",
-                        args=[None, {"frame": {"duration": 700, "redraw": True}, "transition": {"duration": 300}, "fromcurrent": True}]
-                    ),
-                    dict(
-                        label="Pause",
-                        method="animate",
-                        args=[[None], {"frame": {"duration": 0, "redraw": False}, "transition": {"duration": 0}, "mode": "immediate"}]
-                    )
-                ]
-            )
-        ],
-        sliders=[
-            dict(
-                active=0,
-                currentvalue={"prefix": "Year: "},
-                pad={"t": 30},
-                steps=[
-                    dict(
-                        label=str(int(y)),
-                        method="animate",
-                        args=[[str(int(y))], {"frame": {"duration": 0, "redraw": True}, "transition": {"duration": 0}, "mode": "immediate"}]
-                    )
-                    for y in years
-                ]
-            )
-        ]
-    )
-    return fig
-```
 
 
 #### Missingness Check
@@ -184,7 +132,7 @@ def plot_county_coverage(df, table_name, value_col):
         
     # Map styling and playback controls
     title_text = f"{table_name}: {value_col} by county and year"
-    fig = apply_map_layout_and_controls(fig, title_text, years)
+    fig = mu.apply_map_layout_and_controls(fig, title_text, years)
 
     return fig
 
@@ -200,7 +148,7 @@ plot_county_coverage(df, "GDP", "county coverage")
 
 # Update these:
 eda_table_name = "GDP"
-cols_to_use = [1,2]
+cols_to_use = [2,3,4]
 
 ## one map per column
 for i in cols_to_use:
@@ -258,7 +206,7 @@ for i in cols_to_use:
         
     ## Make it look nice
     title_text = f"{eda_table_name}: {value_col} by county and year"
-    fig = apply_map_layout_and_controls(fig, title_text, years)
+    fig = mu.apply_map_layout_and_controls(fig, title_text, years)
 
     fig.show()
 ```

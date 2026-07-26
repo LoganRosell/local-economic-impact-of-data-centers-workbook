@@ -16,6 +16,9 @@ import matplotlib.pyplot as plt
 import json
 import urllib.request
 import plotly.graph_objects as go
+import utils.map_utils as mu
+import importlib
+importlib.reload(mu)
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -80,25 +83,6 @@ with open(geojson_path, "r") as f:
 ```
 
 
-```{python}
-# define map layout function
-
-def apply_map_layout_and_controls(fig, title_text):
-    """
-    Applies the carto-positron map style and explicit US centering
-    to an existing static Plotly map figure.
-    """
-    fig.update_layout(
-        title=title_text,
-        map_style="carto-positron",
-        map_zoom=2,
-        map_center={"lat": 37.0902, "lon": -95.7129}, 
-        margin=dict(l=0, r=0, t=50, b=0)
-    )
-    return fig
-```
-
-
 #### Missingness Check
 ```{python}
 # create map of counties for which we have data
@@ -128,7 +112,7 @@ def plot_county_coverage(df, table_name, value_col):
         
     title_text = f"{table_name}: {value_col} County Coverage"
     
-    fig = apply_map_layout_and_controls(fig, title_text)
+    fig = mu.apply_map_layout_and_controls(fig, title_text, [1])
 
     return fig
 
@@ -174,7 +158,7 @@ for i in cols_to_use:
     fig.update_traces(marker_line_width=0.3)
         
     title_text = f"{eda_table_name}: {value_col} County Coverage"
-    fig = apply_map_layout_and_controls(fig, title_text)
+    fig = mu.apply_map_layout_and_controls(fig, title_text,[1])
 
     fig.show()
 ```

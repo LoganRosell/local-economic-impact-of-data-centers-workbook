@@ -16,6 +16,9 @@ import matplotlib.pyplot as plt
 import json
 import urllib.request
 import plotly.graph_objects as go
+import utils.map_utils as mu
+import importlib
+importlib.reload(mu)
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -69,8 +72,6 @@ plt.show()
 
 
 ### Geographic Distribution
-
-
 
 ```{python}
 # load counties map data
@@ -129,7 +130,7 @@ def plot_county_coverage(df, table_name, value_col):
         
     title_text = f"{table_name}: {value_col} County Coverage"
     
-    fig = apply_map_layout_and_controls(fig, title_text)
+    fig = mu.apply_map_layout_and_controls(fig, title_text)
 
     return fig
 
@@ -187,7 +188,7 @@ for i in cols_to_use:
     )
         
     title_text = f"{eda_table_name}: {value_col} County Coverage"
-    fig = apply_map_layout_and_controls(fig, title_text)
+    fig = mu.apply_map_layout_and_controls(fig, title_text)
 
     fig.show()
 ```
