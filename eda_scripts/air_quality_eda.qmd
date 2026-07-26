@@ -65,22 +65,40 @@ print(df.describe().round(2))
 sns.histplot(data=df, x=df["pm25_med_daily_avg"])
 plt.show()
 
+# Check for nomality with a QQ plot
+fig = sm.qqplot(df["pm25_med_daily_avg"], fit=True, line="s")
+plt.show()
+
 # average daily maxiumum for a given year and county
 sns.histplot(data=df, x=df["pm25_max_daily_avg"])
+plt.show()
+# Check for nomality with a QQ plot
+fig = sm.qqplot(df["pm25_max_daily_avg"], fit=True, line="s")
 plt.show()
 
 # average daily average for a given year and county
 sns.histplot(data=df, x=df["pm25_mean_daily_avg"])
 plt.show()
+# Check for nomality with a QQ plot
+fig = sm.qqplot(df["pm25_mean_daily_avg"], fit=True, line="s")
+plt.show()
 ```
+
+The air quality data is right skewed meaning it is not normally distributed. 
+We are using QQ-plots to evaluate normality rather than statitical tests like 
+Shaprio-Wilks given the large sample size which can lead to false negatives on 
+those tests. 
+
 
 ```{python}
 # taking a closer look at high values
 
 # select county-years with usually high average daily max values
 df[df["pm25_max_daily_avg"] > 20]
-
 ```
+
+All observations in our dataset with pm2.5 values greater than 20 are in Califonia
+or Oregon. Many of those observations were in 2020. 
 
 ### Checking Intra-Data-Source Correlation
 
