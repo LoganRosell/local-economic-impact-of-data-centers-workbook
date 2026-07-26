@@ -167,7 +167,7 @@ county_df = county_df[[
 
 ```{python}
 # combine all data together
-mega_df = combine_dfs(county_df, dfs_only_2022)
+mega_df = combine_dfs(county_df, dfs_only_2022[1:])
 ```
 
 ```{python}
