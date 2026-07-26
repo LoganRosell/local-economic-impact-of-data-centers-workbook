@@ -208,30 +208,25 @@ mega_df = mega_df.dropna()
 ## EDA
  
  ```{python}
-# compare the mean value for all features between counties with and without datacenters
+# compare the staticial distributions for all features between counties with and without datacenters
 dc_counties =  mega_df[mega_df["has_datacenter"]==1]
 dc_counties = dc_counties.drop(columns = ["county_id", "has_datacenter"])
-dc_county_means = dc_counties.mean().to_frame()
-dc_county_means["has_dc"] = "no"
-dc_county_means.columns = ["mean", "has_dc"]
+dc_counties["has_dc"] = "no"
 
 non_dc_counties =  mega_df[mega_df["has_datacenter"]==0]
 non_dc_counties = non_dc_counties.drop(columns = ["county_id", "has_datacenter"])
-non_dc_county_means = non_dc_counties.mean().to_frame()
-non_dc_county_means["has_dc"] = "yes"
-non_dc_county_means.columns = ["mean", "has_dc"]
+non_dc_counties["has_dc"] = "yes"
 
-comparing_means_df = pd.concat([dc_county_means, non_dc_county_means], axis=0)
-comparing_means_df = comparing_means_df.reset_index().rename(columns={"index": "feature"})
+comparing_df = pd.concat([dc_counties, non_dc_counties], axis=0)
+comparing_df = comparing_df.reset_index().rename(columns={"index": "feature"})
 
-feature_list = comparing_means_df["feature"].unique()
+feature_list = comparing_df.columns
 
 for i in feature_list:
-    sns.barplot(
-        x = "feature",
-        y = "mean",
-        hue = "has_dc",
-        data = comparing_means_df[comparing_means_df["feature"]==i]
+    sns.boxplot(
+        x = "has_dc",
+        y = i,
+        data = comparing_df
     )
     plt.show()
 
