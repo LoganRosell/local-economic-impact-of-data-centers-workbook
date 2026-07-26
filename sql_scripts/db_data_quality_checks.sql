@@ -3,6 +3,7 @@
 -- clear tables with old names if needed
 DROP TABLE IF EXISTS county_population;
 drop table if exists county_gdp;
+DROP TABLE IF EXISTS data_centers;
 
 -- Check for duplicates in composite keys across all db tables
 
@@ -112,8 +113,9 @@ HAVING COUNT(*) > 1;
 -- GROUP BY data_center_id
 -- HAVING COUNT(*) > 1;
 
---========================================
+-- ========================================================
 -- Check for records present in one table but not another
+-- ========================================================
 
 SELECT
   c.county_id
@@ -133,7 +135,7 @@ SELECT
     (SELECT COUNT(DISTINCT county_id) FROM business_patterns) AS business_counties,
     (SELECT COUNT(DISTINCT county_id) FROM county_distances_lookup) AS county_dist,
     (SELECT COUNT(DISTINCT county_id) FROM gdp) AS gdp_counties,
-    (SELECT COUNT(DISTINCT county_id) FROM naics_518_establishments) AS income_counties,
+    (SELECT COUNT(DISTINCT county_id) FROM naics_518_establishments) AS naics_518_counties,
     (SELECT COUNT(DISTINCT county_id) FROM personal_income) AS income_counties,
     (SELECT COUNT(DISTINCT county_id) FROM population) AS population_counties,
     (SELECT COUNT(DISTINCT county_id) FROM res_construction_permits) AS permit_counties,
@@ -233,6 +235,7 @@ ORDER BY total_tables_present ASC, state, county_name;
 
 -- ================================================
 -- Check range of years covered by each table
+-- ================================================
 
 SELECT 
   (SELECT MAX(year) FROM air_quality) AS air_quality_max_year,
