@@ -96,7 +96,8 @@ def column_selector(
             Defaults to False.
         vif_cut_off: Maximum allowed Variance Inflation Factor threshold.
             Numeric columns with a VIF equal to or exceeding this threshold are
-            dropped to reduce multicollinearity. Defaults to 5.0.
+            dropped to reduce multicollinearity. Defaults to 5.0. To skip check 
+            entirly enter a negative value.
         outlier_sd_cut_off: Number of standard deviations from the mean used to
             define outlier boundaries. Columns containing values beyond this
             range are dropped. Defaults to 3.0.
@@ -140,14 +141,15 @@ def column_selector(
     df_num = df[cols_to_keep].dropna()
 
     #vif filter
-    filter_results = []
-    for idx, col in enumerate(cols_to_keep):
-        vif = variance_inflation_factor(df_num.values, idx)
-        if vif < vif_cut_off:
-            filter_results.append(col)
-        else:
-            drop_reasons.append({"dropped_col": col, "reason": f"high VIF ({vif:.2f})"})
-    cols_to_keep = filter_results
+    if vif_cut_off > 0:
+        filter_results = []
+        for idx, col in enumerate(cols_to_keep):
+            vif = variance_inflation_factor(df_num.values, idx)
+            if vif < vif_cut_off:
+                filter_results.append(col)
+            else:
+                drop_reasons.append({"dropped_col": col, "reason": f"high VIF ({vif:.2f})"})
+        cols_to_keep = filter_results
     
     #outlier filter
     filter_results = []
@@ -179,3 +181,30 @@ def column_selector(
     if return_report:
         return cols_to_keep, drop_report_df
     return cols_to_keep
+
+def combine_dfs(base_df, dfs_to_join):
+    out_df = base_df.copy()
+
+    for i, df in enumerate(dfs_to_join):
+        if "county_id" not in df.columns:
+            raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
+
+        # Make sure all tables only have one row per county
+        dupes = df["county_id"][df["county_id"].duplicated()].unique()
+        if len(dupes) > 0:
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)}")
+
+        out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+
+    missing_summary_table = (
+        out_df.isna()
+        .mean()
+        .sort_values(ascending = False)
+        .rename("missing_share")
+        .reset_index()
+        .rename(columns={"index":"column"})
+    )
+
+    print("Missing Summary: \n", missing_summary_table)
+
+    return out_df
