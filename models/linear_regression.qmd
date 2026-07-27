@@ -313,3 +313,19 @@ mlu.compare_models(
     ["fixed effect year", "yearly trend"]
 )
 ```
+
+#### Analysis
+
+For this regression I tested a few different types of models, including different lags and a fixed effect vs. yearly trend. Ultimately, a two-year fixed effect had the best results. For consistency in analysis, I used this two-year fixed effect for all other models.
+
+Findings:
+
+* R2 = 0.847
+* 2 year lagged data centers had p-value of 0.004 and coefficient of 0.0033
+    * This can be interpreted as one new datacenter being correlated with a 0.0033% increase in unemployment
+* 2 year lagged *spatial* data centers had a p-value of 0.186
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with unemployment
+* There is a bit of a wedge shape towards 0 with the residuals graph, but otherwise residuals look fairly evenly distributed
+* The Q-Q plot has some variance on the left tail, and fairly high variance on the right tail.
+* All VIFs are well below 5
+
