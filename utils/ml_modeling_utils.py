@@ -6,6 +6,12 @@ import seaborn as sns
 from scipy import stats
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LassoCV
+import statsmodels.formula.api as smf
+from scipy.stats import probplot
+import statsmodels.api as sm 
 
 # slice df to specific year
 def return_specific_year(df, year):
