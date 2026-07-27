@@ -1,8 +1,11 @@
 
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy import stats
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 # slice df to specific year
 def return_specific_year(df, year):
@@ -66,3 +69,59 @@ def model_accuracy_report(model, X_train, y_train, X_test, y_test):
     ).plot()
 
     plt.show()
+
+
+
+# Help select numeric columns which meet different model assumptions
+def column_selector(
+                    df,
+                    no_na = False,
+                    vif_cut_off = 5.0,
+                    outlier_sd_cut_off = 3.0,
+                    only_normal = False
+                    ):
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    non_numeric_cols = df.select_dtypes(exclude="number").columns.tolist()
+    cols_to_keep = numeric_cols.copy()
+    df_num = df[numeric_cols]
+    
+    #na filter
+    if no_na:
+        filter_results = []
+        for col in cols_to_keep:
+            if not df_num[col].hasnans:
+                filter_results.append(col)
+        cols_to_keep = filter_results
+    
+    df_num = df[cols_to_keep].dropna()
+
+    #vif filter
+    filter_results = []
+    for idx, col in enumerate(cols_to_keep):
+        if variance_inflation_factor(df_num.values, idx) < vif_cut_off:
+            filter_results.append(col)
+    cols_to_keep = filter_results
+    
+    #outlier filter
+    filter_results = []
+    for col in cols_to_keep:
+        mean = df_num[col].mean()
+        std = df_num[col].std()
+        lower_bound = mean - (outlier_sd_cut_off * std)
+        upper_bound = mean + (outlier_sd_cut_off * std)
+        if ((df_num[col] > lower_bound) & (df_num[col] < upper_bound)).all():
+            filter_results.append(col)
+    cols_to_keep = filter_results
+
+    #normality filter
+    if only_normal:
+        filter_results = []
+        for col in cols_to_keep:
+            skew = abs(stats.skew(df_num[col]))
+            p_val = stats.normaltest(df_num[col]).pvalue
+            if p_val > 0.05 or skew < 1:
+                filter_results.append(col)
+        cols_to_keep = filter_results
+
+    cols_to_keep = non_numeric_cols + cols_to_keep
+    return cols_to_keep
