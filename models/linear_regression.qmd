@@ -368,3 +368,79 @@ Findings:
 * The Q-Q plot has fairly high variance on both ends
 * All VIFs are well below 5
 
+### Single Family Permits
+
+```{python}
+mlu.run_lasso(regression_df, "single_family_permits_per_capita_log1p", exclude_cols = exclude_from_lasso)
+```
+
+```{python}
+con_cols = [
+    "real_gdp_2017_dollars_thousands_per_capita_log",
+    "unemployment_rate_pct",
+    "tot_employee_count_professional_per_capita_log1p",
+    "pm25_mean_daily_avg",
+    "tot_employee_count_public_services_per_capita",
+    "population_log",
+    "tot_employee_count_trade_transport_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "tot_employee_count_industrial_per_capita_log1p",
+    ]
+```
+
+```{python}
+x_lag2 = con_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "single_family_permits_per_capita_log1p", x_lag2)
+```
+
+#### Analysis
+
+Findings:
+
+* R2 = 0.773
+* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000008774
+    * This can be interpreted as one new datacenter being correlated with a 0.00088% increase in single family permits
+* 2 year lagged *spatial* data centers had a p-value of 0.883
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with single family permits
+* There is a bit of a wedge shape towards 0 with the residuals graph, but otherwise residuals look fairly evenly distributed
+* The Q-Q plot has fairly high variance on both ends
+* All VIFs are well below 5
+
+### Multifamily Permits
+
+```{python}
+mlu.run_lasso(regression_df, "all_multifamily_permits_per_capita_log1p", exclude_cols = exclude_from_lasso)
+```
+
+```{python}
+multi_con_cols = [
+    "real_gdp_2017_dollars_thousands_per_capita_log",
+    "unemployment_rate_pct",
+    "tot_employee_count_professional_per_capita_log1p",
+    "tot_employee_count_public_services_per_capita",
+    "population_log",
+    "tot_employee_count_trade_transport_per_capita_log1p",
+    "tot_employee_count_industrial_per_capita_log1p",
+    ]
+```
+
+```{python}
+x_lag2 = multi_con_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "all_multifamily_permits_per_capita_log1p", x_lag2)
+```
+
+#### Analysis
+
+Findings:
+
+* R2 = 0.347
+* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000009727
+    * This can be interpreted as one new datacenter being correlated with a 0.00097% increase in multifamily permits
+* 2 year lagged *spatial* data centers had a p-value of 0.286
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with multifamily permits
+* The residuals graph is highly irregular and has clear patterns
+* The Q-Q plot has very high variance on both ends
+* All VIFs are well below 5
+
+* All VIFs are well below 5
