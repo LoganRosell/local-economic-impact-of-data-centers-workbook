@@ -439,3 +439,10 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     print(vif_df)
 
     return model
+
+def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
+    df = df.copy()
+    df = df.sort_values([group_col, time_col])
+    for lag in lags:
+        df[f"{col}_lag{lag}"] = df.groupby(group_col)[col].shift(lag)
+    return df
