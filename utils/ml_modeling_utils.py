@@ -267,3 +267,115 @@ def eda_summary(df):
     }).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
 
     return eda_summary
+
+def run_lasso(df, y_col):
+    """
+    Runs lasso in report mode on a dataframe against a specified response variable,
+    which helps narrow down variables that may be predictive of that response variable.
+    Variables with a higher coefficient should be included,
+    whereas variables at or near zero should be considered for exclusion from the final model.
+    """
+    target_col = y_col
+    drop_cols = ["county_id", "year", target_col]
+
+    lasso_df = df.dropna().copy()
+    lasso_df.columns = lasso_df.columns.map(str)
+
+    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
+    
+    X = lasso_df[x_cols]
+    y = lasso_df[target_col]
+
+    lasso_pipe = make_pipeline(
+        StandardScaler(),
+        LassoCV(cv = 5, random_state = 15215, max_iter = 10000)
+    )
+
+    lasso_pipe.fit(X, y)
+
+    lasso_model = lasso_pipe.named_steps["lassocv"]
+    coef_df = pd.DataFrame({
+        "feature": x_cols,
+        "coef": lasso_model.coef_
+    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
+
+    print(coef_df.to_string(index=False))
+
+def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
+    """
+    Runs a linear regression and prints the regression output,
+    residuals plot (Linearity and Equal Variance assumptions),
+    QQ plot (Normally-distributed errors/residuals assumption),
+    and VIF results (Independent observations (given X) assumption)
+
+    Parameters:
+        - df = the dataframe you want to do regression on
+        - y_col = the response variable
+        - x_cols = the explanatory variables
+        - county_fe = whether you want to use a county fixed effect
+        - year_fe = whether you want to use a year fixed effect
+
+    Assumption(s):
+        - Always clusters by county
+    """
+
+    needed_cols = [y_col] + x_cols
+    if county_fe:
+        needed_cols.append("county_id")
+    if year_fe:
+        needed_cols.append("year")
+
+    needed_cols = list(dict.fromkeys(needed_cols))
+    reg_df = df[needed_cols].dropna().copy()
+
+    rhs_terms = x_cols.copy()
+    if county_fe:
+        rhs_terms.append("C(county_id)")
+    if year_fe:
+        rhs_terms.append("C(year)")
+
+    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
+
+    model = smf.ols(formula=formula, data=reg_df).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": reg_df["county_id"]}
+        )
+
+    fitted = model.fittedvalues
+    resid = model.resid
+
+    print("Formula:")
+    print(formula)
+    print("\n")
+    print(model.summary())
+
+    # Examine Residuals
+    plt.figure(figsize=(7, 5))
+    plt.scatter(fitted, resid, alpha=0.6)
+    plt.axhline(0, color="red", linestyle = "--")
+    plt.xlabel("Fitted values")
+    plt.ylabel("Residuals")
+    plt.title("Residuals vs Fitted Values")
+    plt.show()
+
+    # Check For Normal Distribution
+    plt.figure(figsize=(7, 5))
+    probplot(resid, dist = "norm", plot = plt)
+    plt.title("Q-Q Plot of Residuals")
+    plt.show()
+
+    # Check VIF
+    vif_X = reg_df[x_cols].copy()
+    vif_X = sm.add_constant(vif_X, has_constant="add")
+
+    vif_df = pd.DataFrame({
+        "variable": vif_X.columns,
+        "vif": [
+            np.nan if col == "const" else variance_inflation_factor(vif_X.values, i)
+            for i, col in enumerate(vif_X.columns)
+        ]
+    })
+
+    print(vif_df)
+
+    return model

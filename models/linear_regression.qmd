@@ -227,114 +227,10 @@ regression_df = final_df[regression_cols].copy()
 
 ## Linear Regressions
 
-### Lasso Function
+### Unemployment
 
 ```{python}
-def run_lasso(df, y_col):
-    target_col = y_col
-    drop_cols = ["county_id", "year", target_col]
-
-    lasso_df = df.dropna().copy()
-    lasso_df.columns = lasso_df.columns.map(str)
-
-    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
-    
-    X = lasso_df[x_cols]
-    y = lasso_df[target_col]
-
-    lasso_pipe = make_pipeline(
-        StandardScaler(),
-        LassoCV(cv = 5, random_state = 15215, max_iter = 10000)
-    )
-
-    lasso_pipe.fit(X, y)
-
-    lasso_model = lasso_pipe.named_steps["lassocv"]
-    coef_df = pd.DataFrame({
-        "feature": x_cols,
-        "coef": lasso_model.coef_
-    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
-
-    print(coef_df.to_string(index=False))
-```
-
-### Regression Function
-
-```{python}
-def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
-
-    needed_cols = [y_col] + x_cols
-    if county_fe:
-        needed_cols.append("county_id")
-    if year_fe:
-        needed_cols.append("year")
-
-    needed_cols = list(dict.fromkeys(needed_cols))
-    reg_df = df[needed_cols].dropna().copy()
-
-    rhs_terms = x_cols.copy()
-    if county_fe:
-        rhs_terms.append("C(county_id)")
-    if year_fe:
-        rhs_terms.append("C(year)")
-
-    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
-
-    model = smf.ols(formula=formula, data=reg_df).fit(
-            cov_type="cluster",
-            cov_kwds={"groups": reg_df["county_id"]}
-        )
-
-    fitted = model.fittedvalues
-    resid = model.resid
-
-    print("Formula:")
-    print(formula)
-    print("\n")
-    print(model.summary())
-
-    # Examine Residuals
-    plt.figure(figsize=(7, 5))
-    plt.scatter(fitted, resid, alpha=0.6)
-    plt.axhline(0, color="red", linestyle = "--")
-    plt.xlabel("Fitted values")
-    plt.ylabel("Residuals")
-    plt.title("Residuals vs Fitted Values")
-    plt.show()
-
-    # Check For Normal Distribution
-    plt.figure(figsize=(7, 5))
-    probplot(resid, dist = "norm", plot = plt)
-    plt.title("Q-Q Plot of Residuals")
-    plt.show()
-
-    # Check VIF
-    vif_X = reg_df[x_cols].copy()
-    vif_X = sm.add_constant(vif_X, has_constant="add")
-
-    vif_df = pd.DataFrame({
-        "variable": vif_X.columns,
-        "vif": [
-            np.nan if col == "const" else variance_inflation_factor(vif_X.values, i)
-            for i, col in enumerate(vif_X.columns)
-        ]
-    })
-
-    print(vif_df)
-
-    return model
-```
-
-### Regressions and Analysis
-
-#### Unemployment
-```{python}
-run_lasso(regression_df, "unemployment_rate_pct")
-```
-
-```{python}
-run_linear_regression(regression_df, "unemployment_rate_pct", [
-    "pm25_mean_daily_avg",
+unemp_candidate_cols = ["pm25_mean_daily_avg",
     "personal_income_thousands_of_dollars_per_capita",
     "tot_employee_count_industrial_per_capita",
     "tot_employee_count_trade_transport_per_capita",
@@ -346,6 +242,12 @@ run_linear_regression(regression_df, "unemployment_rate_pct", [
     "population",
     "tot_employee_count_primary_industries_per_capita",
     "tot_employee_count_information_per_capita",
-    "tot_employee_count_professional_per_capita"
-    ])
+    "tot_employee_count_professional_per_capita"]
+```
+
+```{python}
+mlu.run_lasso(regression_df, "unemployment_rate_pct")
+```
+```{python}
+mlu.run_linear_regression(regression_df, "unemployment_rate_pct", unemp_candidate_cols)
 ```
