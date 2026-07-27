@@ -7,7 +7,6 @@ author: Logan Rosell
 To get a sense of how predictive each of our available x variables are of whether a county does or does not have data centers we will create a simple Logistic Regression model including all variables. 
 
 
-
 ## Logistic Regression Model
 
 ```{python}
@@ -40,6 +39,10 @@ from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.stattools import durbin_watson
 from imblearn.over_sampling import SMOTE
 from imblearn.ensemble import BalancedRandomForestClassifier
+
+import importlib
+import utils.ml_modeling_utils as mlu
+importlib.reload(mlu)
 
 load_dotenv()
 data_dir = Path(os.environ["DATA_DIR"])
@@ -106,24 +109,13 @@ def combine_dfs(base_df, dfs_to_join):
 ```
 
 ```{python}
-# slice df to specific year
-def return_specific_year(df, year):
-    assert"year" in df.columns, "data frame does not have a year column"
-    year = int(year)
-    sliced_df = df[df["year"]==year]
-    sliced_df = sliced_df.drop(columns = ["year"])
-    return sliced_df
-```
-
-```{python}
 # keep only 2022 (closest to when we know data center counts to be true)
 
 df_with_years = [dc_df, air_df, bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df]
 
-dfs_only_2022 = [return_specific_year(x, 2022) for x in df_with_years]
+dfs_only_2022 = [mlu.return_specific_year(x, 2022) for x in df_with_years]
 
 ```
-
 
 ```{python}
 # Aggregate all industry codes per county into one summed row
@@ -175,15 +167,6 @@ mega_df = combine_dfs(county_df, dfs_only_2022[1:])
 ```
 
 ```{python}
-# Make applicable columns per-capita
-def make_per_capita(df, per_capita_cols):
-
-    for col in per_capita_cols:
-        df[f"{col}_per_capita"] = df[col] / df["population"]
-
-    df = df.drop(columns=per_capita_cols)
-    return df
-
 
 per_capita_cols = [
        'tot_employee_count', 'annual_payroll', 'tot_establishment_count',
@@ -197,7 +180,7 @@ per_capita_cols = [
        'multifamily_permits_5_or_more_units'
 ]
 
-mega_df = make_per_capita(mega_df, per_capita_cols)
+mega_df = mlu.make_per_capita(mega_df, per_capita_cols)
 ```
 
 ```{python}
@@ -278,13 +261,7 @@ print(results_df)
 
 ```{python}
 # Check for high correlation between x variables indicating a violation of the independence assumption
-
-corr_matrix = mega_df.corr()
-# Plot heatmap correlations
-plt.figure(figsize=(16, 12))
-sns.heatmap(corr_matrix, cmap="coolwarm", annot=False, vmin=-1, vmax=1)
-plt.title("Correlation Matrix Heatmap")
-plt.show()
+mlu.show_correlation_heat_map(mega_df)
 ```
 
 
@@ -304,12 +281,7 @@ independent_x_vars_df = mega_df.drop(columns = [
     "current_gdp_dollars_thousands_per_capita"
     ])
 
-corr_matrix = independent_x_vars_df.corr()
-# Plot heatmap correlations
-plt.figure(figsize=(16, 12))
-sns.heatmap(corr_matrix, cmap="coolwarm", annot=False, vmin=-1, vmax=1)
-plt.title("Correlation Matrix Heatmap")
-plt.show()
+mlu.show_correlation_heat_map(independent_x_vars_df)
 ```
 
 ```{python}
@@ -328,6 +300,8 @@ independent_x_vars_df = independent_x_vars_df.drop(columns = [
        'est1000_1500_per_capita', 'est1500_2500_per_capita',
        'est2500_5000_per_capita', 'est>5000_per_capita'
     ])
+
+mlu.show_correlation_heat_map(independent_x_vars_df)
 ```
 
 ```{python}
@@ -372,38 +346,6 @@ smote = SMOTE(sampling_strategy='minority', random_state=57)
 X_train_sm, y_train_sm = smote.fit_resample(X_train_scaled, y_train)
 ```
 
-```{python}
-# function to return model accuracy report
-def model_accuracy_report(model, X_train, y_train, X_test, y_test):
-    # training calculations
-    y_pred_train = model.predict(X_train)
-    train_acc = sum(y_pred_train == y_train) / len(y_train)
-    print(f"Overall Training Accuracy: {train_acc:.4f}")
-    
-    actual_pos_train = (y_train == 1)
-    true_pos_train = (y_pred_train == 1) & actual_pos_train
-    tpr_train = sum(true_pos_train) / sum(actual_pos_train)
-    print(f"True Positive Training Accuracy: {tpr_train:.4f}")
-    
-    print("-" * 20) 
-    
-    # test calculations
-    y_pred_test = model.predict(X_test)
-    test_acc = sum(y_pred_test == y_test) / len(y_test)
-    print(f"Overall Test Accuracy: {test_acc:.4f}")
-    
-    actual_pos_test = (y_test == 1)
-    true_pos_test = (y_pred_test == 1) & actual_pos_test
-    tpr_test = sum(true_pos_test) / sum(actual_pos_test)
-    print(f"True Positive Test Accuracy: {tpr_test:.4f}")
-
-    ConfusionMatrixDisplay(
-    confusion_matrix=confusion_matrix(y_test, y_pred_test), 
-    display_labels=model.classes_
-    ).plot()
-
-    plt.show()
-```
 
 ### Logistic Regression
 
@@ -417,7 +359,7 @@ log_reg.fit(X_train_sm, y_train_sm)
 ```{python}
 # evaluate model performance
 print("Logistic Regression")
-model_accuracy_report(log_reg, X_train_sm, y_train_sm, X_test_scaled, y_test)
+mlu.model_accuracy_report(log_reg, X_train_sm, y_train_sm, X_test_scaled, y_test)
 
 ```
 
@@ -461,7 +403,7 @@ rf_model.fit(X_train_sm, y_train_sm)
 ```{python}
 # evaluate model performance
 print("Random Forest with SMOTE")
-model_accuracy_report(rf_model, X_train_sm, y_train_sm, X_test_scaled, y_test)
+mlu.model_accuracy_report(rf_model, X_train_sm, y_train_sm, X_test_scaled, y_test)
 
 ```
 
@@ -478,7 +420,7 @@ brf_model = BalancedRandomForestClassifier(
 brf_model.fit(X_train_scaled, y_train)
 
 print("Balanced Random Forest")
-model_accuracy_report(brf_model, X_train_scaled, y_train, X_test_scaled, y_test)
+mlu.model_accuracy_report(brf_model, X_train_scaled, y_train, X_test_scaled, y_test)
 ```
 
 ```{python}
@@ -525,7 +467,7 @@ brf_full_model = BalancedRandomForestClassifier(
 brf_full_model.fit(X_train_scaled_full, y_train)
 
 print("Balanced Random Forest")
-model_accuracy_report(brf_full_model, X_train_scaled_full, y_train, X_test_scaled_full, y_test)
+mlu.model_accuracy_report(brf_full_model, X_train_scaled_full, y_train, X_test_scaled_full, y_test)
 ```
 
 ```{python}
