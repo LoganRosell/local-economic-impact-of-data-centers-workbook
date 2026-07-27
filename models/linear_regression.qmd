@@ -560,3 +560,77 @@ Findings:
 * The Q-Q plot has somewhat some small variance on the left side and high variance on the right side
 * All VIFs are well below 5
 
+### Business Sectors
+
+```{python}
+business_sectors = [
+    "tot_employee_count_industrial_per_capita_log1p",
+    "tot_employee_count_information_per_capita_log1p",
+    "tot_employee_count_professional_per_capita_log1p",
+    "tot_employee_count_public_services_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_trade_transport_per_capita_log1p"
+]
+```
+
+```{python}
+for sector in business_sectors: 
+    print("Sector: ", sector)
+    mlu.run_lasso(regression_df, sector, exclude_cols = exclude_from_lasso)
+    print("\n")
+```
+
+```{python}
+sector_cols = [
+    "tot_employee_count_professional_per_capita_log1p",
+    "unemployment_rate_pct",
+    "tot_employee_count_public_services_per_capita_log1p",
+    "population_log",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "single_family_permits_per_capita_log1p",
+    "all_multifamily_permits_per_capita_log1p",
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "real_gdp_2017_dollars_thousands_per_capita_log",
+    "tot_employee_count_trade_transport_per_capita_log1p",
+    "pm25_mean_daily_avg"
+    ]
+```
+
+```{python}
+for sector in business_sectors:
+    target_sector_cols = [c for c in sector_cols
+    if c not in {sector}]
+
+    x_lag2 = target_sector_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+    model_lag2 = mlu.run_linear_regression(regression_df, sector, x_lag2)
+```
+
+#### Analysis
+
+The business sectors were analyzed in this order (all log1p-transformed):
+
+1. industrial
+2. information (includes datacenters)
+3. professional
+4. public services
+5. primary industries
+6. transport
+
+Findings (numbered by sector):
+* R2 = -0.838 [1], 0.816 [2], 0.897 [3], 0.924 [4], 0.641 [5], 0.813 [6]
+* 2 year lagged data centers had p-value of:
+    0.000 [1], 0.022 [2], 0.026 [3], 0.006 [4], 0.022 [5], 0.017 [6]
+    and a coefficient of:
+    -0.00004554 [1], 0.00004831 [2], 0.00006324 [3], -0.00006887 [4], -0.00001851 [5], -0.00003386 [6]
+    * This can be interpreted as one new datacenter being correlated with a 100x coefficient % increase in that sector's employment (ex: 0.0046% increase for industrial)
+    * If p-value is greater than 0.05, there is no significant correlation
+* 2 year lagged *spatial* data centers had a p-value of:
+    0.030 [1], 0.479 [2], 0.132 [3], 0.010 [4], 0.091 [5] 
+    and a coefficient of:
+    -0.00004997 [1], NA [2], NA [3], -0.00009138 [4], NA [5], NA [6]
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 100x coefficient % increase in the inverse-distance weighted average of that sector's employment (ex: 0.0050% increase for industrial)
+    * If p-value is greater than 0.05, there is no significant correlation
+* The residuals graph has a wedge shape around 0, but otherwise fairly regularly distributed residuals for all graphs
+* The Q-Q plot has somewhat high variance on both sides for all graphs
+* All VIFs are well below 5 for all models
