@@ -179,3 +179,75 @@ def column_selector(
     if return_report:
         return cols_to_keep, drop_report_df
     return cols_to_keep
+
+def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]):
+    """
+    Groups similar NAICS codes via shared sector names and pivots into wide format.
+    
+    Parameters:
+        bus_df = df with naics_industry_code key column
+        code_df = code lookup df
+        cols_to_pivot = list of columns to pivot 
+
+    Returns:
+        Wide DataFrame with one row per (county_id, year)
+    """
+
+    # Clean sector names
+    code_df = code_df.copy()
+    bucket_map = {
+        "Agriculture, Forestry, Fishing and Hunting": "primary_industries",
+        "Mining, Quarrying, and Oil and Gas Extraction": "primary_industries",
+        "Utilities": "primary_industries",
+
+        "Construction": "industrial",
+        "Manufacturing": "industrial",
+
+        "Wholesale Trade": "trade_transport",
+        "Retail Trade": "trade_transport",
+        "Transportation and Warehousing": "trade_transport",
+
+        "Information": "information",
+
+        "Finance and Insurance": "professional",
+        "Real Estate and Rental and Leasing": "professional",
+        "Professional, Scientific, and Technical Services": "professional",
+        "Management of Companies and Enterprises": "professional",
+
+        "Administrative and Support and Waste Management and Remediation Services": "public_services",
+        "Educational Services": "public_services",
+        "Health Care and Social Assistance": "public_services",
+        "Arts, Entertainment, and Recreation": "public_services",
+        "Accommodation and Food Services": "public_services",
+        "Other Services (except Public Administration)": "public_services",
+        "Public Administration": "public_services",
+        
+        "Unknown": "unknown",
+    }
+    
+    code_df["bucket"] = code_df["definition"].map(bucket_map)
+
+    # Merge codes and bus_df
+    output_df = bus_df.merge(code_df, left_on = "naics_industry_code", right_on = "sector", how = "left")
+
+    grouped_df = (
+        output_df.groupby(["county_id", "year", "bucket"], as_index=False)
+        [cols_to_pivot]
+        .sum()
+    )
+
+    # Pivot
+    pivot_df = grouped_df.pivot_table(
+        index=["county_id", "year"],
+        columns="bucket",
+        values=cols_to_pivot,
+        aggfunc="sum"
+    )
+
+    pivot_df.columns = [
+        f"{metric}_{sector}" for metric, sector in pivot_df.columns
+    ]
+
+    pivot_df = pivot_df.reset_index()
+
+    return pivot_df

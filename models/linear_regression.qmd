@@ -112,7 +112,7 @@ def combine_dfs(base_df, dfs_to_join):
 ```{python}
 bus_county_year_df = dbu.all_county_years(county_df, year_start=2001, year_end=2022)
 
-pivoted_bus_df = dbu.pivot_naics(bus_df, code_df)
+pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
 
 final_bus_df = bus_county_year_df.merge(pivoted_bus_df, on=["county_id", "year"], how="left")
 
