@@ -443,4 +443,41 @@ Findings:
 * The Q-Q plot has very high variance on both ends
 * All VIFs are well below 5
 
+### GDP
+
+```{python}
+mlu.run_lasso(regression_df, "real_gdp_2017_dollars_thousands_per_capita_log", exclude_cols = exclude_from_lasso)
+```
+
+```{python}
+gdp_cols = [
+    "tot_employee_count_professional_per_capita_log1p",
+    "pm25_mean_daily_avg_spatial_weighted_avg_5",
+    "tot_employee_count_public_services_per_capita",
+    "population_log",
+    "tot_employee_count_trade_transport_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "single_family_permits_per_capita_log1p"
+    ]
+```
+
+```{python}
+x_lag2 = gdp_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "real_gdp_2017_dollars_thousands_per_capita_log", x_lag2)
+```
+
+#### Analysis
+
+Findings:
+
+* R2 = 0.935
+* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.0010
+    * This can be interpreted as one new datacenter being correlated with a 0.10% increase in gdp
+* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0009
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.09% increase in gdp
+* The residuals graph is mostly regularly distributed with some outliers on the right side
+* The Q-Q plot has somewhat high variance on both ends
+* All VIFs are well below 5
+
 * All VIFs are well below 5
