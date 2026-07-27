@@ -232,6 +232,20 @@ regression_df = mlu.add_lags(regression_df, "datacenters", lags=(1, 2, 3))
 regression_df = mlu.add_lags(regression_df, "datacenters_spatial_weighted_avg_5", lags=(1, 2, 3))
 ```
 
+```{python}
+# Add years for trend models
+regression_df["year_num"] = regression_df["year"] - regression_df["year"].min()
+```
+
+```{python}
+datacenter_cols = [col for col in regression_df.columns if 'datacenter' in col]
+
+exclude_from_lasso = ["year_num"] + [
+    c for c in datacenter_cols
+    if c not in {"datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"}
+]
+```
+
 ## Linear Regressions
 
 ### Unemployment
@@ -288,8 +302,6 @@ mlu.compare_models(
 
 
 ```{python}
-regression_df["year_num"] = regression_df["year"] - regression_df["year"].min()
-
 x_lag2_trend = unemp_cols + ["year_num", "datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
 
 model_lag2_trend = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag2_trend, year_fe = False)
