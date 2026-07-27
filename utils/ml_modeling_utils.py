@@ -74,14 +74,51 @@ def model_accuracy_report(model, X_train, y_train, X_test, y_test):
 
 # Help select numeric columns which meet different model assumptions
 def column_selector(
-                    df,
-                    no_na = False,
-                    vif_cut_off = 5.0,
-                    outlier_sd_cut_off = 3.0,
-                    only_normal = False,
-                    return_report = False,
-                    cols_to_preserve = []
-                    ):
+    df,
+    no_na = False,
+    vif_cut_off = 5.0,
+    outlier_sd_cut_off = 3.0,
+    only_normal = False,
+    return_report = False,
+    cols_to_preserve = None
+    ):
+    """Filters DataFrame columns based on missingness, VIF, outliers, and normality.
+
+    Examines all numeric columns in a DataFrame and filters them sequentially
+    through missing value checks, Variance Inflation Factor (VIF) limits,
+    standard deviation outlier cutoffs, and D'Agostino-Pearson normality tests.
+    Non-numeric columns and user-specified preserved columns bypass these checks
+    and are always retained.
+
+    Args:
+        df: The pandas DataFrame containing features to evaluate.
+        no_na: If True, drops numeric columns that contain any NA/NaN values.
+            Defaults to False.
+        vif_cut_off: Maximum allowed Variance Inflation Factor threshold.
+            Numeric columns with a VIF equal to or exceeding this threshold are
+            dropped to reduce multicollinearity. Defaults to 5.0.
+        outlier_sd_cut_off: Number of standard deviations from the mean used to
+            define outlier boundaries. Columns containing values beyond this
+            range are dropped. Defaults to 3.0.
+        only_normal: If True, retains only numeric columns that satisfy
+            normality criteria (p-value > 0.05 from D'Agostino-Pearson test or
+            absolute skewness < 1.0). Defaults to False.
+        return_report: If True, returns both the list of retained column names
+            and a pandas DataFrame detailing reasons for dropped columns.
+            Defaults to False.
+        cols_to_preserve: A list of column names to bypass filtering and retain
+            unconditionally in the output. Defaults to None.
+
+    Returns:
+        If return_report is False:
+            A list of column names retained after filtering.
+        If return_report is True:
+            A tuple containing:
+                - List[str]: Column names retained after filtering.
+                - pd.DataFrame: Audit trail with columns ['dropped_col', 'reason'].
+    """
+    if cols_to_preserve is None:
+        cols_to_preserve = []
     df = df.drop(columns=cols_to_preserve)
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     non_numeric_cols = df.select_dtypes(exclude="number").columns.tolist()
