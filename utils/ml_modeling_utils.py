@@ -328,7 +328,7 @@ def apply_suggested_transforms(df, eda_df, cols_to_exclude = None):
 
     return df
 
-def run_lasso(df, y_col):
+def run_lasso(df, y_col, exclude_cols = None):
     """
     Runs lasso in report mode on a dataframe against a specified response variable,
     which helps narrow down variables that may be predictive of that response variable.
@@ -336,7 +336,11 @@ def run_lasso(df, y_col):
     whereas variables at or near zero should be considered for exclusion from the final model.
     """
     target_col = y_col
-    drop_cols = ["county_id", "year", target_col]
+
+    if exclude_cols is None:
+        exclude_cols = []
+
+    drop_cols = ["county_id", "year", target_col] + exclude_cols
 
     lasso_df = df.dropna().copy()
     lasso_df.columns = lasso_df.columns.map(str)
