@@ -294,6 +294,40 @@ def eda_summary(df, acceptable_skew = 3.0):
 
     return summary
 
+def apply_suggested_transforms(df, eda_df, cols_to_exclude = None):
+    """
+    Apply the suggested transformations from the `eda_summary` output
+    """
+    if cols_to_exclude is None:
+        cols_to_exclude = []
+
+    df = df.copy()
+    transform_map = eda_df.set_index("column")["suggested_transform"].to_dict()
+
+    rename_map = {}
+
+    for col, transform in transform_map.items():
+        if col in cols_to_exclude:
+            continue
+
+        if transform == "none":
+            continue
+
+        new_col = f"{col}_{transform}"
+
+        if transform == "log":
+            df[col] = np.where(df[col] > 0, np.log(df[col]), np.nan)
+        elif transform == "log1p":
+            df[col] = np.log1p(df[col])
+        else:
+            continue
+
+        rename_map[col] = new_col
+
+    df = df.rename(columns = rename_map)
+
+    return df
+
 def run_lasso(df, y_col):
     """
     Runs lasso in report mode on a dataframe against a specified response variable,
