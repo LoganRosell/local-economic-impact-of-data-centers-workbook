@@ -78,12 +78,16 @@ def column_selector(
                     no_na = False,
                     vif_cut_off = 5.0,
                     outlier_sd_cut_off = 3.0,
-                    only_normal = False
+                    only_normal = False,
+                    return_report = False,
+                    cols_to_preserve = []
                     ):
+    df = df.drop(columns=cols_to_preserve)
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     non_numeric_cols = df.select_dtypes(exclude="number").columns.tolist()
     cols_to_keep = numeric_cols.copy()
     df_num = df[numeric_cols]
+    drop_reasons = []
     
     #na filter
     if no_na:
@@ -91,6 +95,9 @@ def column_selector(
         for col in cols_to_keep:
             if not df_num[col].hasnans:
                 filter_results.append(col)
+            else: 
+                drop_reasons.append({"dropped_col": col, "reason": "contained NA values"})
+                
         cols_to_keep = filter_results
     
     df_num = df[cols_to_keep].dropna()
@@ -98,8 +105,11 @@ def column_selector(
     #vif filter
     filter_results = []
     for idx, col in enumerate(cols_to_keep):
-        if variance_inflation_factor(df_num.values, idx) < vif_cut_off:
+        vif = variance_inflation_factor(df_num.values, idx)
+        if vif < vif_cut_off:
             filter_results.append(col)
+        else:
+            drop_reasons.append({"dropped_col": col, "reason": f"high VIF ({vif:.2f})"})
     cols_to_keep = filter_results
     
     #outlier filter
@@ -111,6 +121,8 @@ def column_selector(
         upper_bound = mean + (outlier_sd_cut_off * std)
         if ((df_num[col] > lower_bound) & (df_num[col] < upper_bound)).all():
             filter_results.append(col)
+        else:
+            drop_reasons.append({"dropped_col": col, "reason": f"exceeded {outlier_sd_cut_off} SD outliers"})
     cols_to_keep = filter_results
 
     #normality filter
@@ -121,7 +133,12 @@ def column_selector(
             p_val = stats.normaltest(df_num[col]).pvalue
             if p_val > 0.05 or skew < 1:
                 filter_results.append(col)
+            else:
+                drop_reasons.append({"dropped_col": col, "reason": f"non-normal (skew={skew:.2f}, p={p_val:.4f})"})
         cols_to_keep = filter_results
 
-    cols_to_keep = non_numeric_cols + cols_to_keep
+    drop_report_df = pd.DataFrame(drop_reasons)
+    cols_to_keep = non_numeric_cols + cols_to_preserve + cols_to_keep 
+    if return_report:
+        return cols_to_keep, drop_report_df
     return cols_to_keep
