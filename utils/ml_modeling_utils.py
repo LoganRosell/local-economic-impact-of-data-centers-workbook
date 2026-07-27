@@ -446,3 +446,16 @@ def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
     for lag in lags:
         df[f"{col}_lag{lag}"] = df.groupby(group_col)[col].shift(lag)
     return df
+
+def compare_models(models, names):
+    rows = []
+    for name, model in zip(names, models):
+        rows.append({
+            "model": name,
+            "r2": model.rsquared,
+            "adj_r2": model.rsquared_adj,
+            "aic": model.aic,
+            "bic": model.bic,
+            "nobs": model.nobs
+        })
+    return pd.DataFrame(rows).sort_values("aic")
