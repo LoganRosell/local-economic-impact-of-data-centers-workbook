@@ -155,13 +155,7 @@ per_capita_cols = [
     "all_multifamily_permits_spatial_weighted_avg_5"
 ] + cols
 
-per_capita_df = final_df[per_capita_cols].div(final_df["population"], axis=0)
-
-per_capita_df.columns = [f"{c}_per_capita" for c in per_capita_df.columns]
-
-final_df = pd.concat([final_df, per_capita_df], axis=1)
-
-final_df = final_df.drop(columns=per_capita_cols)
+final_df = mlu.make_per_capita(final_df, per_capita_cols)
 ```
 
 ```{python}
