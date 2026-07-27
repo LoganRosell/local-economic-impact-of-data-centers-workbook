@@ -480,4 +480,83 @@ Findings:
 * The Q-Q plot has somewhat high variance on both ends
 * All VIFs are well below 5
 
+### Air Quality
+
+```{python}
+exclude_air = exclude_from_lasso + ["pm25_mean_daily_avg_spatial_weighted_avg_5"]
+
+mlu.run_lasso(regression_df, "pm25_mean_daily_avg", exclude_cols = exclude_air)
+```
+
+```{python}
+air_cols = [
+    "tot_employee_count_professional_per_capita_log1p",
+    "unemployment_rate_pct",
+    "tot_employee_count_public_services_per_capita",
+    "population_log",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "single_family_permits_per_capita_log1p",
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "real_gdp_2017_dollars_thousands_per_capita_log"
+    ]
+```
+
+```{python}
+x_lag2 = air_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "pm25_mean_daily_avg", x_lag2)
+```
+
+#### Analysis
+
+Findings:
+
+* R2 = 0.819
+* 2 year lagged data centers had p-value of 0.901
+    * This can be interpreted as one new datacenter not being correlated with an change in air quality
+* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0071
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.0071 point increase in mean daily avg pm25. 
+* The residuals graph is very regularly distributed
+* The Q-Q plot has somewhat some small variance on the left side and high variance on the right side
 * All VIFs are well below 5
+
+### Spatial Air Quality
+
+```{python}
+exclude_air = exclude_from_lasso + ["pm25_mean_daily_avg"]
+
+mlu.run_lasso(regression_df, "pm25_mean_daily_avg_spatial_weighted_avg_5", exclude_cols = exclude_air)
+```
+
+```{python}
+spatial_air_cols = [
+    "tot_employee_count_professional_per_capita_log1p",
+    "unemployment_rate_pct",
+    "tot_employee_count_public_services_per_capita",
+    "population_log",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "single_family_permits_per_capita_log1p",
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "real_gdp_2017_dollars_thousands_per_capita_log"
+    ]
+```
+
+```{python}
+x_lag2 = spatial_air_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "pm25_mean_daily_avg_spatial_weighted_avg_5", x_lag2)
+```
+
+#### Analysis
+
+Findings:
+
+* R2 = 0.817
+* 2 year lagged data centers had p-value of 0.846
+    * This can be interpreted as one new datacenter not being correlated with an change in the inverse-distance weighted average of air quality
+* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0069
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.0069 point increase in the inverse-distance weighted average of mean daily avg pm25. 
+* The residuals graph is very regularly distributed
+* The Q-Q plot has somewhat some small variance on the left side and high variance on the right side
+* All VIFs are well below 5
+
