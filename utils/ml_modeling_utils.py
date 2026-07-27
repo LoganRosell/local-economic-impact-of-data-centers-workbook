@@ -258,21 +258,41 @@ def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_
 
     return pivot_df
 
-def eda_summary(df):
+def eda_summary(df, acceptable_skew = 3.0):
     """
-    Returns missingness, number of unique observations, standard deviation, 
-    and skew for all numeric columns in a dataframe
+    Returns missingness, number of unique observations, standard deviation,
+    skew, zero information, min, max, and suggested transformation
+    for all numeric columns in a dataframe
+
+    Parameters:
+        - df to run eda on
+        - acceptable_skew: how much skew is considered "acceptable" for determining whether a transform is needed
     """
     num_df = df.select_dtypes(include="number").copy()
 
-    eda_summary = pd.DataFrame({
+    summary = pd.DataFrame({
         "missing_share": num_df.isna().mean(),
         "n_unique": num_df.nunique(),
         "std": num_df.std(numeric_only=True),
         "skew": num_df.skew(numeric_only=True),
+        "n_zeros": (num_df == 0).sum(),
+        "zero_share": (num_df == 0).mean(),
+        "min": num_df.min(numeric_only = True),
+        "max": num_df.max(numeric_only = True)
     }).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
 
-    return eda_summary
+    summary["can_log"] = summary["min"] > 0
+    summary["suggested_transform"] = np.where(
+        summary["can_log"] & (summary["skew"] > acceptable_skew),
+        "log",
+        np.where(
+            (~summary["can_log"]) & (summary["zero_share"] > 0) & (summary["skew"] > acceptable_skew),
+            "log1p",
+            "none"
+        )
+    )
+
+    return summary
 
 def run_lasso(df, y_col):
     """
