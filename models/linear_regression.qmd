@@ -285,3 +285,19 @@ mlu.compare_models(
     ["base", "lag1", "lag2", "lag3"]
 )
 ```
+
+
+```{python}
+regression_df["year_num"] = regression_df["year"] - regression_df["year"].min()
+
+x_lag2_trend = unemp_cols + ["year_num", "datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+
+model_lag2_trend = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag2_trend, year_fe = False)
+```
+
+```{python}
+mlu.compare_models(
+    [model_lag2, model_lag2_trend],
+    ["fixed effect year", "yearly trend"]
+)
+```
