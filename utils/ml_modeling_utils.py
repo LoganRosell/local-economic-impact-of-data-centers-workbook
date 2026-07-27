@@ -251,3 +251,19 @@ def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_
     pivot_df = pivot_df.reset_index()
 
     return pivot_df
+
+def eda_summary(df):
+    """
+    Returns missingness, number of unique observations, standard deviation, 
+    and skew for all numeric columns in a dataframe
+    """
+    num_df = df.select_dtypes(include="number").copy()
+
+    eda_summary = pd.DataFrame({
+        "missing_share": num_df.isna().mean(),
+        "n_unique": num_df.nunique(),
+        "std": num_df.std(numeric_only=True),
+        "skew": num_df.skew(numeric_only=True),
+    }).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
+
+    return eda_summary

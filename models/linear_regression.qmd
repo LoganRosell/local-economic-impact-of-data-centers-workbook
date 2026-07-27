@@ -185,16 +185,7 @@ final_df = final_df.sort_values(["county_id", "year"]).reset_index(drop=True)
 
 #### Find Columns that are still skewed
 ```{python}
-num_df = final_df.select_dtypes(include="number").copy()
-
-eda_summary = pd.DataFrame({
-    "missing_share": num_df.isna().mean(),
-    "n_unique": num_df.nunique(),
-    "std": num_df.std(numeric_only=True),
-    "skew": num_df.skew(numeric_only=True),
-}).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
-
-eda_summary
+mlu.eda_summary(final_df)
 ```
 
 ### Select Columns for final regressions
