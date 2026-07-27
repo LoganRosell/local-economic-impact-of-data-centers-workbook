@@ -329,3 +329,42 @@ Findings:
 * The Q-Q plot has some variance on the left tail, and fairly high variance on the right tail.
 * All VIFs are well below 5
 
+
+### Personal Income
+
+```{python}
+mlu.run_lasso(regression_df, "personal_income_thousands_of_dollars_per_capita_log", exclude_cols = exclude_from_lasso)
+```
+
+```{python}
+inc_cols = [
+    "real_gdp_2017_dollars_thousands_per_capita_log",
+    "unemployment_rate_pct",
+    "tot_employee_count_professional_per_capita_log1p",
+    "single_family_permits_per_capita_log1p",
+    "pm25_mean_daily_avg",
+    "tot_employee_count_public_services_per_capita",
+    "population_log",
+    "tot_employee_count_trade_transport_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p"
+    ]
+```
+
+```{python}
+x_lag2 = inc_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "personal_income_thousands_of_dollars_per_capita_log", x_lag2)
+```
+
+#### Analysis
+
+Findings:
+
+* R2 = 0.965
+* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.0004 
+    * This can be interpreted as one new datacenter being correlated with a 0.04% increase in personal income
+* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0007
+    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.07% increase in personal income
+* Overall the residuals look fairly evenly distributed other than 2 clumps near 0 and 2
+* The Q-Q plot has fairly high variance on both ends
+* All VIFs are well below 5
+
