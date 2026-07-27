@@ -217,6 +217,15 @@ regression_cols = [
 regression_df = final_df[regression_cols].copy()
 ```
 
+```{python}
+summary_df = mlu.eda_summary(regression_df)
+summary_df
+```
+
+```{python}
+regression_df = mlu.apply_suggested_transforms(regression_df, summary_df, cols_to_exclude = ["datacenters", "datacenters_spatial_weighted_avg_5"])
+regression_df
+```
 ## Linear Regressions
 
 ### Unemployment
