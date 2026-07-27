@@ -1,0 +1,163 @@
+
+```{python}
+# importing required libraries
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LogisticRegression
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+
+import importlib
+import utils.ml_modeling_utils as mlu
+importlib.reload(mlu)
+```
+
+```{python}
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+# Load data
+
+# this function cleans up the weird column name formatting SQLAlchemy addes to the df when loading. 
+def load_table(table_name, engine):
+    df = pd.read_sql_table(table_name, engine)
+    df.columns = [str(col) for col in df.columns]
+    return df
+
+dc_df = load_table("naics_518_establishments", engine)
+air_df = load_table("air_quality", engine)
+bus_df = load_table("business_patterns", engine)
+gdp_df = load_table("gdp", engine)
+inc_df = load_table("personal_income", engine)
+pop_df = load_table("population", engine)
+perm_df = load_table("res_construction_permits", engine)
+emp_df = load_table("unemployment", engine)
+county_df = load_table("us_counties", engine)
+```
+
+## Create Table for models
+
+```{python}
+# keep only 2022 (closest to when we know data center counts to be true)
+
+df_with_years = [dc_df, air_df, bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df]
+dfs_only_2022 = [mlu.return_specific_year(x, 2022) for x in df_with_years]
+```
+
+```{python}
+# Aggregate all industry codes per county into one summed row
+dfs_only_2022[2] = dfs_only_2022[2].groupby(
+    ["county_id"],
+    as_index=False
+    ).sum()
+
+dfs_only_2022[2] = dfs_only_2022[2].drop(columns = ["naics_industry_code"])
+```
+
+```{python}
+# Add column to county_df which indicates the presence of one or more data centers in a county
+dc_df_2022 = dfs_only_2022[0]
+
+counties_with_dc = dc_df_2022["county_id"].unique()
+
+county_df["has_datacenter"] = county_df["county_id"].isin(counties_with_dc).astype(int)
+county_df = county_df[[
+    "county_id",
+    "has_datacenter",
+    "centroid_lon",
+    "centroid_lat",
+    "land_area_sqmi",
+    "water_area_sqmi"
+    ]]
+```
+
+```{python}
+# combine all data together
+mega_df = mlu.combine_dfs(county_df, dfs_only_2022[1:])
+```
+
+```{python}
+
+per_capita_cols = [
+       'tot_employee_count', 'annual_payroll', 'tot_establishment_count',
+       'est<5', 'est5_9', 'est10_19', 'est20_49', 'est50_99', 'est100_249',
+       'est250_499', 'est500_999', 'est>1000', 'est1000_1500', 'est1500_2500',
+       'est2500_5000', 'est>5000', 'real_gdp_2017_dollars_thousands',
+       'current_gdp_dollars_thousands',
+       'all_permits',
+       'single_family_permits', 'all_multifamily_permits',
+       'multifamily_permits_2_units', 'multifamily_permits_3_4_units',
+       'multifamily_permits_5_or_more_units'
+]
+
+mega_df = mlu.make_per_capita(mega_df, per_capita_cols)
+```
+
+
+```{python}
+cols_no_crazy_outliers = mlu.column_selector(mega_df, False, -1, 20, False, False)
+df_trimmed_cols = mega_df[cols_no_crazy_outliers]
+df_trimmed_cols = df_trimmed_cols.dropna()
+```
+
+
+```{python}
+X = df_trimmed_cols.drop('has_datacenter', axis=1)
+y = df_trimmed_cols['has_datacenter']
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+```
+
+
+```{python}
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_scaled)
+
+X_train, X_test, y_train, y_test = train_test_split(X_pca, y, test_size=0.3, random_state=42)
+
+model = LogisticRegression()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+```
+
+
+```{python}
+mlu.model_accuracy_report(model, X_train, y_train, X_test, y_test)
+```
+
+
+```{python}
+y_numeric = pd.factorize(y)[0]
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.scatter(X_scaled[:, 0], X_scaled[:, 1], c=y_numeric, cmap='coolwarm', edgecolor='k', s=80)
+plt.xlabel('Original Feature 1')
+plt.ylabel('Original Feature 2')
+plt.title('Before PCA: Using First 2 Standardized Features')
+plt.colorbar(label='Target classes')
+
+plt.subplot(1, 2, 2)
+plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y_numeric, cmap='coolwarm', edgecolor='k', s=80)
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.title('After PCA: Projected onto 2 Principal Components')
+plt.colorbar(label='Target classes')
+
+plt.tight_layout()
+plt.show()
+```
