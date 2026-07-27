@@ -264,4 +264,24 @@ mlu.column_selector(
     )
 ```
 
+```{python}
+# Baseline
+x_base = unemp_cols + ["datacenters", "datacenters_spatial_weighted_avg_5"]
+model_base = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_base)
+
+x_lag1 = unemp_cols + ["datacenters_lag1", "datacenters_spatial_weighted_avg_5_lag1"]
+model_lag1 = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag1)
+
+x_lag2 = unemp_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
+model_lag2 = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag2)
+
+x_lag3 = unemp_cols + ["datacenters_lag3", "datacenters_spatial_weighted_avg_5_lag3"]
+model_lag3 = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag3)
+```
+
+```{python}
+mlu.compare_models(
+    [model_base, model_lag1, model_lag2, model_lag3],
+    ["base", "lag1", "lag2", "lag3"]
+)
 ```
