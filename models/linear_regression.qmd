@@ -226,6 +226,12 @@ summary_df
 regression_df = mlu.apply_suggested_transforms(regression_df, summary_df, cols_to_exclude = ["datacenters", "datacenters_spatial_weighted_avg_5"])
 regression_df
 ```
+
+```{python}
+regression_df = mlu.add_lags(regression_df, "datacenters", lags=(1, 2, 3))
+regression_df = mlu.add_lags(regression_df, "datacenters_spatial_weighted_avg_5", lags=(1, 2, 3))
+```
+
 ## Linear Regressions
 
 ### Unemployment
