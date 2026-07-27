@@ -252,5 +252,16 @@ unemp_cols = ["pm25_mean_daily_avg_spatial_weighted_avg_5",
 ```
 
 ```{python}
-mlu.run_linear_regression(regression_df, "unemployment_rate_pct", unemp_candidate_cols)
+mlu.show_correlation_heat_map(regression_df[unemp_cols])
+```
+
+```{python}
+mlu.column_selector(
+    regression_df[unemp_cols],
+    outlier_sd_cut_off = 3.0,
+    only_normal = True,
+    return_report = True
+    )
+```
+
 ```
