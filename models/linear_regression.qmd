@@ -343,7 +343,7 @@ inc_cols = [
     "tot_employee_count_professional_per_capita_log1p",
     "single_family_permits_per_capita_log1p",
     "pm25_mean_daily_avg",
-    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_public_services_per_capita_log1p",
     "population_log",
     "tot_employee_count_trade_transport_per_capita_log1p",
     "tot_employee_count_primary_industries_per_capita_log1p"
@@ -380,7 +380,7 @@ con_cols = [
     "unemployment_rate_pct",
     "tot_employee_count_professional_per_capita_log1p",
     "pm25_mean_daily_avg",
-    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_public_services_per_capita_log1p",
     "population_log",
     "tot_employee_count_trade_transport_per_capita_log1p",
     "tot_employee_count_primary_industries_per_capita_log1p",
@@ -399,9 +399,9 @@ model_lag2 = mlu.run_linear_regression(regression_df, "single_family_permits_per
 Findings:
 
 * R2 = 0.773
-* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000008774
+* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000008738
     * This can be interpreted as one new datacenter being correlated with a 0.00088% increase in single family permits
-* 2 year lagged *spatial* data centers had a p-value of 0.883
+* 2 year lagged *spatial* data centers had a p-value of 0.886
     * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with single family permits
 * There is a bit of a wedge shape towards 0 with the residuals graph, but otherwise residuals look fairly evenly distributed
 * The Q-Q plot has fairly high variance on both ends
@@ -418,7 +418,7 @@ multi_con_cols = [
     "real_gdp_2017_dollars_thousands_per_capita_log",
     "unemployment_rate_pct",
     "tot_employee_count_professional_per_capita_log1p",
-    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_public_services_per_capita_log1p",
     "population_log",
     "tot_employee_count_trade_transport_per_capita_log1p",
     "tot_employee_count_industrial_per_capita_log1p",
@@ -435,9 +435,9 @@ model_lag2 = mlu.run_linear_regression(regression_df, "all_multifamily_permits_p
 Findings:
 
 * R2 = 0.347
-* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000009727
+* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000009731
     * This can be interpreted as one new datacenter being correlated with a 0.00097% increase in multifamily permits
-* 2 year lagged *spatial* data centers had a p-value of 0.286
+* 2 year lagged *spatial* data centers had a p-value of 0.288
     * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with multifamily permits
 * The residuals graph is highly irregular and has clear patterns
 * The Q-Q plot has very high variance on both ends
@@ -453,7 +453,7 @@ mlu.run_lasso(regression_df, "real_gdp_2017_dollars_thousands_per_capita_log", e
 gdp_cols = [
     "tot_employee_count_professional_per_capita_log1p",
     "pm25_mean_daily_avg_spatial_weighted_avg_5",
-    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_public_services_per_capita_log1p",
     "population_log",
     "tot_employee_count_trade_transport_per_capita_log1p",
     "tot_employee_count_primary_industries_per_capita_log1p",
@@ -474,7 +474,7 @@ Findings:
 * R2 = 0.935
 * 2 year lagged data centers had p-value of 0.000 and coefficient of 0.0010
     * This can be interpreted as one new datacenter being correlated with a 0.10% increase in gdp
-* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0009
+* 2 year lagged *spatial* data centers had a p-value of 0.001 and a coefficient of 0.0009
     * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.09% increase in gdp
 * The residuals graph is mostly regularly distributed with some outliers on the right side
 * The Q-Q plot has somewhat high variance on both ends
@@ -492,7 +492,7 @@ mlu.run_lasso(regression_df, "pm25_mean_daily_avg", exclude_cols = exclude_air)
 air_cols = [
     "tot_employee_count_professional_per_capita_log1p",
     "unemployment_rate_pct",
-    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_public_services_per_capita_log1p",
     "population_log",
     "tot_employee_count_primary_industries_per_capita_log1p",
     "tot_employee_count_industrial_per_capita_log1p",
@@ -512,7 +512,7 @@ model_lag2 = mlu.run_linear_regression(regression_df, "pm25_mean_daily_avg", x_l
 Findings:
 
 * R2 = 0.819
-* 2 year lagged data centers had p-value of 0.901
+* 2 year lagged data centers had p-value of 0.879
     * This can be interpreted as one new datacenter not being correlated with an change in air quality
 * 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0071
     * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.0071 point increase in mean daily avg pm25. 
@@ -532,7 +532,7 @@ mlu.run_lasso(regression_df, "pm25_mean_daily_avg_spatial_weighted_avg_5", exclu
 spatial_air_cols = [
     "tot_employee_count_professional_per_capita_log1p",
     "unemployment_rate_pct",
-    "tot_employee_count_public_services_per_capita",
+    "tot_employee_count_public_services_per_capita_log1p",
     "population_log",
     "tot_employee_count_primary_industries_per_capita_log1p",
     "tot_employee_count_industrial_per_capita_log1p",
@@ -552,7 +552,7 @@ model_lag2 = mlu.run_linear_regression(regression_df, "pm25_mean_daily_avg_spati
 Findings:
 
 * R2 = 0.817
-* 2 year lagged data centers had p-value of 0.846
+* 2 year lagged data centers had p-value of 0.384
     * This can be interpreted as one new datacenter not being correlated with an change in the inverse-distance weighted average of air quality
 * 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0069
     * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.0069 point increase in the inverse-distance weighted average of mean daily avg pm25. 
