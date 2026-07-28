@@ -106,7 +106,8 @@ def column_selector(
             entirly enter a negative value.
         outlier_sd_cut_off: Number of standard deviations from the mean used to
             define outlier boundaries. Columns containing values beyond this
-            range are dropped. Defaults to 3.0.
+            range are dropped. Defaults to 3.0. To skip check 
+            entirly enter a negative value.
         only_normal: If True, retains only numeric columns that satisfy
             normality criteria (p-value > 0.05 from D'Agostino-Pearson test or
             absolute skewness < 1.0). Defaults to False.
@@ -158,17 +159,18 @@ def column_selector(
         cols_to_keep = filter_results
     
     #outlier filter
-    filter_results = []
-    for col in cols_to_keep:
-        mean = df_num[col].mean()
-        std = df_num[col].std()
-        lower_bound = mean - (outlier_sd_cut_off * std)
-        upper_bound = mean + (outlier_sd_cut_off * std)
-        if ((df_num[col] > lower_bound) & (df_num[col] < upper_bound)).all():
-            filter_results.append(col)
-        else:
-            drop_reasons.append({"dropped_col": col, "reason": f"exceeded {outlier_sd_cut_off} SD outliers"})
-    cols_to_keep = filter_results
+    if outlier_sd_cut_off > 0:
+        filter_results = []
+        for col in cols_to_keep:
+            mean = df_num[col].mean()
+            std = df_num[col].std()
+            lower_bound = mean - (outlier_sd_cut_off * std)
+            upper_bound = mean + (outlier_sd_cut_off * std)
+            if ((df_num[col] > lower_bound) & (df_num[col] < upper_bound)).all():
+                filter_results.append(col)
+            else:
+                drop_reasons.append({"dropped_col": col, "reason": f"exceeded {outlier_sd_cut_off} SD outliers"})
+        cols_to_keep = filter_results
 
     #normality filter
     if only_normal:
@@ -465,6 +467,7 @@ def compare_models(models, names):
             "nobs": model.nobs
         })
     return pd.DataFrame(rows).sort_values("aic")
+
 def combine_dfs(base_df, dfs_to_join):
     out_df = base_df.copy()
 
