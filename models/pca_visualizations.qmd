@@ -8,6 +8,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import accuracy_score
 import umap
 from pathlib import Path
 import os
@@ -264,4 +267,55 @@ plt.colorbar(scatter, label='Target classes')
 
 plt.tight_layout()
 plt.show()
+```
+
+
+
+### K-Nearest Neighbor
+
+```{python}
+# Range of k values to try
+k_range = range(1, 75)
+cv_scores = []
+
+# Evaluate each k using 5-fold cross-validation
+for k in k_range:
+    knn = KNeighborsClassifier(n_neighbors=k)
+    scores = cross_val_score(knn, X_scaled, y, cv=5, scoring='accuracy')
+    cv_scores.append(scores.mean())
+
+# Plot accuracy vs. k
+plt.figure(figsize=(8, 5))
+plt.plot(k_range, cv_scores, marker='o')
+plt.title("k-NN Cross-Validation Accuracy vs k")
+plt.xlabel("Number of Neighbors: k")
+plt.ylabel("Cross-Validated Accuracy")
+plt.grid(True)
+plt.show()
+
+# Best k
+best_k = k_range[np.argmax(cv_scores)]
+print(f"Best k from cross-validation: {best_k}")
+```
+
+```{python}
+# Train a k-NN classifier
+knn = KNeighborsClassifier(n_neighbors=68)
+knn.fit(X_train, y_train)
+
+# Predict and evaluate
+y_pred = knn.predict(X_test)
+mlu.model_accuracy_report(knn,X_train, y_train, X_test, y_test)
+```
+
+KNN accuracy is decent, but not particuarly enlightening since it does not reduce dimentionality and thus does not allow us to visuzual and explore the data like PCA or UMAP. 
+
+
+
+### K Means Clustering
+
+The hypothesis is that using this unsupervised ML model will help us uncover meaningful groupings in our data. Perhaps we find that there are 3 distinct types of counties which we can then test via linear regression to see if their responses to additional datacenters are the same or different. 
+
+```{python}
+
 ```
