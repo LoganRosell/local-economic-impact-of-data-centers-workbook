@@ -11,6 +11,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import accuracy_score
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 import umap
 from pathlib import Path
 import os
@@ -316,6 +318,108 @@ KNN accuracy is decent, but not particuarly enlightening since it does not reduc
 
 The hypothesis is that using this unsupervised ML model will help us uncover meaningful groupings in our data. Perhaps we find that there are 3 distinct types of counties which we can then test via linear regression to see if their responses to additional datacenters are the same or different. 
 
-```{python}
 
+```{python}
+df = mega_df
+df = log_cols(mega_df, cols_to_log)
+
+selected_cols = mlu.column_selector(df, False, -1, 4, False, False)
+df_trimmed_cols = df[selected_cols]
+df_trimmed_cols = df_trimmed_cols.dropna()
+
+X = df_trimmed_cols.drop(columns = [
+    "has_datacenter",
+    "centroid_lon",
+    "centroid_lat",
+    "county_id",
+    "civilian_labor_force_logged",
+    "pm25_pop_daily_avg_logged",
+    "pm25_mean_daily_avg_logged",
+    "multifamily_permits_2_units_per_capita_logged",
+    "multifamily_permits_3_4_units_per_capita_logged",
+    "multifamily_permits_5_or_more_units_per_capita_logged"])
+y = df_trimmed_cols['has_datacenter']
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+```
+
+
+```{python}
+# check performance of clustering model 
+scores = {}
+for k in range(2, 50):
+    km = KMeans(n_clusters=k, init='k-means++', n_init=10, random_state=42)
+    labels = km.fit_predict(X_train)
+    scores[k] = silhouette_score(X_train, labels)
+
+# Plot scores
+plt.figure(figsize=(8, 4))
+plt.plot(list(scores.keys()), list(scores.values()), marker='o')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('Silhouette Score')
+plt.title('Silhouette Score vs. k')
+plt.show()
+```
+Higher Silhouette scores indicate better separate bewetween clusters and thus better performance. Score ranges from -1 to 1
+
+```{python}
+# choose number of cluters to use
+n_clusters=3
+```
+
+```{python}
+kmeans = KMeans(n_clusters, init='k-means++', max_iter=300, n_init=10, random_state=42)
+
+kmeans.fit(X_train)
+
+cluster_labels = kmeans.predict(X_train)
+
+```
+
+```{python}
+# Check which featurs are contributing most to cluster separation
+X_train_df = pd.DataFrame(X_train, columns=X.columns)
+X_train_df['Cluster'] = cluster_labels
+
+# Calculate cluster means
+cluster_means = X_train_df.groupby('Cluster').mean()
+
+# Plot heatmap with  feature names
+plt.figure(figsize=(12, 10))
+sns.heatmap(
+    cluster_means.T, 
+    cmap='coolwarm', 
+    annot=True, 
+    fmt='.2f'
+)
+
+plt.title('Cluster Profiles by Feature Means')
+plt.xlabel('Cluster ID')
+plt.ylabel('Features')
+plt.tight_layout()
+plt.show()
+
+silhouette_avg_train_data = silhouette_score(X_train, cluster_labels)
+print(f'Train Data Silhouette Score: {silhouette_avg_train_data:.2f}')
+
+test_cluster_labels = kmeans.predict(X_test)
+silhouette_avg_test = silhouette_score(X_test, test_cluster_labels)
+print(f'Test Data Silhouette Score: {silhouette_avg_test:.2f}')
+```
+
+
+```{python}
+# save cluster lables to data frame for later use
+train_clusters = kmeans.predict(X_train)
+test_clusters = kmeans.predict(X_test)
+
+kmeans_labled_df = df_trimmed_cols.copy()
+
+kmeans_labled_df.loc[y_train.index, 'cluster_label'] = train_clusters
+kmeans_labled_df.loc[y_test.index, 'cluster_label'] = test_clusters
+
+kmeans_labled_df['cluster_label'] = kmeans_labled_df['cluster_label'].astype(int)
 ```
