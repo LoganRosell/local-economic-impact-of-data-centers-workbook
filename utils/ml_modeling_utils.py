@@ -6,6 +6,12 @@ import seaborn as sns
 from scipy import stats
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LassoCV
+import statsmodels.formula.api as smf
+from scipy.stats import probplot
+import statsmodels.api as sm 
 
 # slice df to specific year
 def return_specific_year(df, year):
@@ -182,6 +188,283 @@ def column_selector(
         return cols_to_keep, drop_report_df
     return cols_to_keep
 
+def pivot_naics(bus_df, code_df, cols_to_pivot = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]):
+    """
+    Groups similar NAICS codes via shared sector names and pivots into wide format.
+    
+    Parameters:
+        bus_df = df with naics_industry_code key column
+        code_df = code lookup df
+        cols_to_pivot = list of columns to pivot 
+
+    Returns:
+        Wide DataFrame with one row per (county_id, year)
+    """
+
+    # Clean sector names
+    code_df = code_df.copy()
+    bucket_map = {
+        "Agriculture, Forestry, Fishing and Hunting": "primary_industries",
+        "Mining, Quarrying, and Oil and Gas Extraction": "primary_industries",
+        "Utilities": "primary_industries",
+
+        "Construction": "industrial",
+        "Manufacturing": "industrial",
+
+        "Wholesale Trade": "trade_transport",
+        "Retail Trade": "trade_transport",
+        "Transportation and Warehousing": "trade_transport",
+
+        "Information": "information",
+
+        "Finance and Insurance": "professional",
+        "Real Estate and Rental and Leasing": "professional",
+        "Professional, Scientific, and Technical Services": "professional",
+        "Management of Companies and Enterprises": "professional",
+
+        "Administrative and Support and Waste Management and Remediation Services": "public_services",
+        "Educational Services": "public_services",
+        "Health Care and Social Assistance": "public_services",
+        "Arts, Entertainment, and Recreation": "public_services",
+        "Accommodation and Food Services": "public_services",
+        "Other Services (except Public Administration)": "public_services",
+        "Public Administration": "public_services",
+        
+        "Unknown": "unknown",
+    }
+    
+    code_df["bucket"] = code_df["definition"].map(bucket_map)
+
+    # Merge codes and bus_df
+    output_df = bus_df.merge(code_df, left_on = "naics_industry_code", right_on = "sector", how = "left")
+
+    grouped_df = (
+        output_df.groupby(["county_id", "year", "bucket"], as_index=False)
+        [cols_to_pivot]
+        .sum()
+    )
+
+    # Pivot
+    pivot_df = grouped_df.pivot_table(
+        index=["county_id", "year"],
+        columns="bucket",
+        values=cols_to_pivot,
+        aggfunc="sum"
+    )
+
+    pivot_df.columns = [
+        f"{metric}_{sector}" for metric, sector in pivot_df.columns
+    ]
+
+    pivot_df = pivot_df.reset_index()
+
+    return pivot_df
+
+def eda_summary(df, acceptable_skew = 3.0):
+    """
+    Returns missingness, number of unique observations, standard deviation,
+    skew, zero information, min, max, and suggested transformation
+    for all numeric columns in a dataframe
+
+    Parameters:
+        - df to run eda on
+        - acceptable_skew: how much skew is considered "acceptable" for determining whether a transform is needed
+    """
+    num_df = df.select_dtypes(include="number").copy()
+
+    summary = pd.DataFrame({
+        "missing_share": num_df.isna().mean(),
+        "n_unique": num_df.nunique(),
+        "std": num_df.std(numeric_only=True),
+        "skew": num_df.skew(numeric_only=True),
+        "n_zeros": (num_df == 0).sum(),
+        "zero_share": (num_df == 0).mean(),
+        "min": num_df.min(numeric_only = True),
+        "max": num_df.max(numeric_only = True)
+    }).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
+
+    summary["can_log"] = summary["min"] > 0
+    summary["suggested_transform"] = np.where(
+        summary["can_log"] & (summary["skew"] > acceptable_skew),
+        "log",
+        np.where(
+            (~summary["can_log"]) & (summary["zero_share"] > 0) & (summary["skew"] > acceptable_skew),
+            "log1p",
+            "none"
+        )
+    )
+
+    return summary
+
+def apply_suggested_transforms(df, eda_df, cols_to_exclude = None):
+    """
+    Apply the suggested transformations from the `eda_summary` output
+    """
+    if cols_to_exclude is None:
+        cols_to_exclude = []
+
+    df = df.copy()
+    transform_map = eda_df.set_index("column")["suggested_transform"].to_dict()
+
+    rename_map = {}
+
+    for col, transform in transform_map.items():
+        if col in cols_to_exclude:
+            continue
+
+        if transform == "none":
+            continue
+
+        new_col = f"{col}_{transform}"
+
+        if transform == "log":
+            df[col] = np.where(df[col] > 0, np.log(df[col]), np.nan)
+        elif transform == "log1p":
+            df[col] = np.log1p(df[col])
+        else:
+            continue
+
+        rename_map[col] = new_col
+
+    df = df.rename(columns = rename_map)
+
+    return df
+
+def run_lasso(df, y_col, exclude_cols = None):
+    """
+    Runs lasso in report mode on a dataframe against a specified response variable,
+    which helps narrow down variables that may be predictive of that response variable.
+    Variables with a higher coefficient should be included,
+    whereas variables at or near zero should be considered for exclusion from the final model.
+    """
+    target_col = y_col
+
+    if exclude_cols is None:
+        exclude_cols = []
+
+    drop_cols = ["county_id", "year", target_col] + exclude_cols
+
+    lasso_df = df.dropna().copy()
+    lasso_df.columns = lasso_df.columns.map(str)
+
+    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
+    
+    X = lasso_df[x_cols]
+    y = lasso_df[target_col]
+
+    lasso_pipe = make_pipeline(
+        StandardScaler(),
+        LassoCV(cv = 5, random_state = 15215, max_iter = 10000)
+    )
+
+    lasso_pipe.fit(X, y)
+
+    lasso_model = lasso_pipe.named_steps["lassocv"]
+    coef_df = pd.DataFrame({
+        "feature": x_cols,
+        "coef": lasso_model.coef_
+    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
+
+    print(coef_df.to_string(index=False))
+
+def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
+    """
+    Runs a linear regression and prints the regression output,
+    residuals plot (Linearity and Equal Variance assumptions),
+    QQ plot (Normally-distributed errors/residuals assumption),
+    and VIF results (Independent observations (given X) assumption)
+
+    Parameters:
+        - df = the dataframe you want to do regression on
+        - y_col = the response variable
+        - x_cols = the explanatory variables
+        - county_fe = whether you want to use a county fixed effect
+        - year_fe = whether you want to use a year fixed effect
+
+    Assumption(s):
+        - Always clusters by county
+    """
+
+    needed_cols = [y_col] + x_cols
+    if county_fe:
+        needed_cols.append("county_id")
+    if year_fe:
+        needed_cols.append("year")
+
+    needed_cols = list(dict.fromkeys(needed_cols))
+    reg_df = df[needed_cols].dropna().copy()
+
+    rhs_terms = x_cols.copy()
+    if county_fe:
+        rhs_terms.append("C(county_id)")
+    if year_fe:
+        rhs_terms.append("C(year)")
+
+    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
+
+    model = smf.ols(formula=formula, data=reg_df).fit(
+            cov_type="cluster",
+            cov_kwds={"groups": reg_df["county_id"]}
+        )
+
+    fitted = model.fittedvalues
+    resid = model.resid
+
+    print("Formula:")
+    print(formula)
+    print("\n")
+    print(model.summary())
+
+    # Examine Residuals
+    plt.figure(figsize=(7, 5))
+    plt.scatter(fitted, resid, alpha=0.6)
+    plt.axhline(0, color="red", linestyle = "--")
+    plt.xlabel("Fitted values")
+    plt.ylabel("Residuals")
+    plt.title("Residuals vs Fitted Values")
+    plt.show()
+
+    # Check For Normal Distribution
+    plt.figure(figsize=(7, 5))
+    probplot(resid, dist = "norm", plot = plt)
+    plt.title("Q-Q Plot of Residuals")
+    plt.show()
+
+    # Check VIF
+    vif_X = reg_df[x_cols].copy()
+    vif_X = sm.add_constant(vif_X, has_constant="add")
+
+    vif_df = pd.DataFrame({
+        "variable": vif_X.columns,
+        "vif": [
+            np.nan if col == "const" else variance_inflation_factor(vif_X.values, i)
+            for i, col in enumerate(vif_X.columns)
+        ]
+    })
+
+    print(vif_df)
+
+    return model
+
+def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
+    df = df.copy()
+    df = df.sort_values([group_col, time_col])
+    for lag in lags:
+        df[f"{col}_lag{lag}"] = df.groupby(group_col)[col].shift(lag)
+    return df
+
+def compare_models(models, names):
+    rows = []
+    for name, model in zip(names, models):
+        rows.append({
+            "model": name,
+            "r2": model.rsquared,
+            "adj_r2": model.rsquared_adj,
+            "aic": model.aic,
+            "bic": model.bic,
+            "nobs": model.nobs
+        })
+    return pd.DataFrame(rows).sort_values("aic")
 def combine_dfs(base_df, dfs_to_join):
     out_df = base_df.copy()
 
