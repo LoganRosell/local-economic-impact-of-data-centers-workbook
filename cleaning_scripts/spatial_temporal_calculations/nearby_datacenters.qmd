@@ -160,3 +160,37 @@ overlap_df = overlap[[
 overlap_df = overlap_df.rename(columns={"target_county_id": "county_id"})
 ```
 
+
+```{python}
+neighbor_dcs = dc_df.rename(columns={
+    "county_id": "neighbor_county_id",
+    "estabs": "neighbor_estabs"
+})
+
+nearby_df = overlap_df.merge(
+    neighbor_dcs,
+    on="neighbor_county_id",
+    how="left"
+)
+
+nearby_df["neighbor_estabs_density_land"] = (
+    nearby_df["neighbor_estabs"] / nearby_df["neighbor_land_area_sqmi"]
+)
+
+nearby_df["neighbor_estabs_contribution"] = (
+    nearby_df["neighbor_estabs_density_land"] *
+    nearby_df["effective_land_overlap_sqmi"]
+)
+
+nearby_dcs_final = (
+    nearby_df
+    .groupby(["county_id", "year"], as_index=False)
+    .agg(
+        nearby_estabs_50mi_landadj=("neighbor_estabs_contribution", "sum"),
+        contributing_counties_50mi=("neighbor_county_id", "nunique"),
+        raw_overlap_sqmi_50mi=("overlap_area_sqmi", "sum"),
+        effective_land_overlap_sqmi_50mi=("effective_land_overlap_sqmi", "sum")
+    )
+)
+```
+
