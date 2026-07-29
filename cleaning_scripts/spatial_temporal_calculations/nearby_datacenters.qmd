@@ -215,3 +215,20 @@ nearby_dcs_final = all_county_years.merge(
 )
 ```
 
+```{python}
+overlap_df.to_sql(
+    name=f"county_buffer_overlap_{BUFFER_MILES}mi",
+    con=engine,
+    schema="transformed",
+    if_exists="replace",
+    index=False
+)
+
+nearby_dcs_final.to_sql(
+    name=f"naics_518_nearby_estabs_{BUFFER_MILES}mi",
+    con=engine,
+    schema="transformed",
+    if_exists="replace",
+    index=False
+)
+```
