@@ -37,6 +37,7 @@ def load_data(csv_path):
     return df
 ```
 
+
 while total_qtrly_wages and taxable_qtrly_wages looks like variables we would want, they are all zero at the county level for every year in our dataset due to privacy laws forcing the government to obsure that information. 
 ```{python}
 
@@ -115,6 +116,16 @@ def remove_non_county_id_codes(df):
     return df
 ```
 
+```{python}
+county_df = pd.read_sql("""
+    SELECT
+        county_id,
+        land_area_sqmi,
+        water_area_sqmi
+    FROM us_counties
+""", engine)
+```
+
 all estabs data is zero until the year 2004 for the NAICS code 518
 ```{python}
 # main loop
@@ -150,10 +161,8 @@ df_final = df_final.groupby(by=["year", "county_id"], as_index=False).sum()
 ## Impute Missingness
 
 ```{python}
-counties = df_final["county_id"].unique()
 years = df_final["year"].unique()
 
-county_df = pd.DataFrame({"county_id": counties})
 year_df = pd.DataFrame({"year": years})
 
 county_year_grid = (
@@ -180,6 +189,14 @@ df_final = df_final.rename(columns = {"estabs_imputed": "estabs"})
 ```
 
 ```{python}
+df_final["estabs_per_sqmi"] = df_final["estabs"] / df_final["land_area_sqmi"]
+
+df_final["estabs_per_100_sqmi"] = df_final["estabs_per_sqmi"] * 100
+
+df_final = df_final.drop(columns = ["land_area_sqmi", "water_area_sqmi"])
+```
+
+```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
     "naics_518_establishments",
@@ -188,3 +205,4 @@ df_final.to_sql(
     index=False
 )
 ```
+

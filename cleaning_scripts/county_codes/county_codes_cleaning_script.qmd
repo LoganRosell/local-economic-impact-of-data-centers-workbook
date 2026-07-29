@@ -20,6 +20,7 @@ data_dir = Path(os.environ["DATA_DIR"])
 csv_path = data_dir / "county_fips_codes" / "county_2020_fips_codes.csv"
 centroids_path = data_dir / "county_fips_codes" / "US_Counties_Centroids.csv"
 physical_areas_path = data_dir / "county_fips_codes" / "census_gazetteer_2025_county_sizes.txt"
+physical_areas_path_2021 = data_dir / "county_fips_codes" / "2021_Gaz_counties_national.txt"
 ```
 
 
@@ -43,6 +44,12 @@ centroids_df = pd.read_csv(
 physical_areas_df = pd.read_csv(
     physical_areas_path,
     delimiter="|", 
+    dtype={"GEOID": str}
+)
+
+physical_areas_2021_df = pd.read_csv(
+    physical_areas_path_2021, 
+    delimiter="\t",
     dtype={"GEOID": str}
 )
 ```
@@ -129,12 +136,24 @@ centroid_missing
 # Looks like these are all non-mainland counties so we should be good
 ```
 
-Connetticut counties are missing due to change in FIPS codes, need to come back and fix this later. 
 ```{python}
 # add in county land and water area measures
 physical_areas_df = physical_areas_df[["GEOID", "ALAND_SQMI", "AWATER_SQMI"]]
+physical_areas_2021_df = physical_areas_2021_df[["GEOID", "ALAND_SQMI", "AWATER_SQMI"]]
+
 physical_areas_df.columns = ["county_id", "land_area_sqmi", "water_area_sqmi"]
+physical_areas_2021_df.columns = ["county_id", "land_area_sqmi", "water_area_sqmi"]
+
 df_final = pd.merge(left=df_final, right=physical_areas_df, on="county_id", how="left")
+
+df_final = df_final.merge(physical_areas_2021_df, on="county_id", how="left", suffixes=("", "_2021"))
+
+mask = df_final["land_area_sqmi"].isna()
+
+df_final.loc[mask, "land_area_sqmi"] = df_final.loc[mask, "land_area_sqmi_2021"]
+df_final.loc[mask, "water_area_sqmi"] = df_final.loc[mask, "water_area_sqmi_2021"]
+
+df_final = df_final.drop(columns=["land_area_sqmi_2021", "water_area_sqmi_2021"])
 ```
 
 ```{python}

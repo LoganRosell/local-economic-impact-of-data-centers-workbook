@@ -1,0 +1,245 @@
+---
+title: "Nearby Datacenters"
+format: html
+---
+
+```{python}
+from pathlib import Path
+import os
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+```
+
+```{python}
+load_dotenv()
+
+data_dir = Path(os.environ["DATA_DIR"])
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+```{python}
+BUFFER_MILES = 50
+BUFFER_METERS = BUFFER_MILES * 1609.344
+
+geojson_path = data_dir / "county_fips_codes" / "geojson_counties_fips.json"
+
+OVERLAP_TABLE = f"transformed.county_buffer_overlap_{BUFFER_MILES}mi"
+OUTPUT_TABLE = f"transformed.naics_518_nearby_estabs_{BUFFER_MILES}mi"
+
+SQM_PER_SQMI = 2_589_988.110336
+```
+
+```{python}
+counties_df = pd.read_sql("""
+    SELECT
+        county_id,
+        land_area_sqmi,
+        water_area_sqmi
+    FROM us_counties
+""", engine)
+
+dc_df = pd.read_sql("""
+    SELECT
+        county_id,
+        year,
+        estabs
+    FROM naics_518_establishments
+""", engine)
+```
+
+```{python}
+counties_geo = gpd.read_file(geojson_path)
+
+# Fix for mismatch of old county code 
+counties_geo["id"] = counties_geo["id"].replace({"46113": "46102"})
+
+counties_geo = counties_geo[["id", "geometry"]].copy()
+counties_geo = counties_geo.rename(columns = {"id": "county_id"})
+```
+
+```{python}
+counties_final = counties_df.merge(counties_geo, on = "county_id", how = "left")
+```
+
+```{python}
+counties_final = gpd.GeoDataFrame(counties_final, geometry="geometry", crs="EPSG:4326")
+
+counties_final = counties_final.to_crs(5070) 
+
+counties_final["geometry"] = counties_final.geometry.make_valid()
+```
+
+```{python}
+counties_final["geom_area_sqmi"] = counties_final.geometry.area / SQM_PER_SQMI
+
+counties_final["total_area_sqmi"] = (
+    counties_final["land_area_sqmi"] +
+    counties_final["water_area_sqmi"]
+)
+
+counties_final["land_share"] = (
+    counties_final["land_area_sqmi"] / counties_final["total_area_sqmi"]
+)
+```
+
+```{python}
+buffers = counties_final[["county_id", "geometry"]].copy()
+buffers["geometry"] = buffers.geometry.buffer(BUFFER_METERS) 
+buffers = buffers.rename(columns={"county_id": "target_county_id"})
+```
+
+```{python}
+candidate_pairs = gpd.sjoin(
+    buffers,
+    counties_final[["county_id", "geometry"]],
+    how = "inner",
+    predicate = "intersects"
+)
+
+candidate_pairs = candidate_pairs.rename(columns={"county_id": "neighbor_county_id"})
+candidate_pairs = candidate_pairs[
+    candidate_pairs["target_county_id"] != candidate_pairs["neighbor_county_id"]
+].copy()
+candidate_pairs = candidate_pairs[["target_county_id", "neighbor_county_id"]].drop_duplicates()
+```
+
+```{python}
+buffer_geom = buffers.rename(columns={"geometry": "buffer_geometry"})
+neighbor_geom = counties_final[["county_id", "geometry", "land_share", "geom_area_sqmi"]].rename(
+    columns={
+        "county_id": "neighbor_county_id",
+        "geometry": "neighbor_geometry",
+        "land_share": "neighbor_land_share",
+        "geom_area_sqmi": "neighbor_geom_area_sqmi"
+    }
+)
+
+overlap = (
+    candidate_pairs
+    .merge(buffer_geom, on="target_county_id", how="left")
+    .merge(neighbor_geom, on="neighbor_county_id", how="left")
+)
+
+buffer_series = gpd.GeoSeries(overlap["buffer_geometry"], crs=counties_final.crs)
+neighbor_series = gpd.GeoSeries(overlap["neighbor_geometry"], crs=counties_final.crs)
+
+intersection_geom = buffer_series.intersection(neighbor_series, align=False)
+
+overlap = gpd.GeoDataFrame(
+    overlap,
+    geometry=intersection_geom,
+    crs=counties_final.crs
+)
+
+overlap = overlap[
+    overlap.geometry.notna() &
+    ~overlap.geometry.is_empty
+].copy()
+
+overlap["overlap_area_sqmi"] = overlap.geometry.area / SQM_PER_SQMI
+overlap["effective_land_overlap_sqmi"] = (
+    overlap["overlap_area_sqmi"] * overlap["neighbor_land_share"]
+)
+
+overlap["neighbor_land_area_sqmi"] = overlap["neighbor_geom_area_sqmi"] * overlap["neighbor_land_share"]
+
+overlap_df = overlap[[
+    "target_county_id",
+    "neighbor_county_id",
+    "neighbor_geom_area_sqmi",
+    "neighbor_land_share",
+    "neighbor_land_area_sqmi",
+    "overlap_area_sqmi",
+    "effective_land_overlap_sqmi"
+]].copy()
+
+overlap_df = overlap_df.rename(columns={"target_county_id": "county_id"})
+```
+
+
+```{python}
+neighbor_dcs = dc_df.rename(columns={
+    "county_id": "neighbor_county_id",
+    "estabs": "neighbor_estabs"
+})
+
+nearby_df = overlap_df.merge(
+    neighbor_dcs,
+    on="neighbor_county_id",
+    how="left"
+)
+
+nearby_df["neighbor_estabs_density_land"] = (
+    nearby_df["neighbor_estabs"] / nearby_df["neighbor_land_area_sqmi"]
+)
+
+nearby_df["neighbor_estabs_contribution"] = (
+    nearby_df["neighbor_estabs_density_land"] *
+    nearby_df["effective_land_overlap_sqmi"]
+)
+
+nearby_dcs_final = (
+    nearby_df
+    .groupby(["county_id", "year"], as_index=False)
+    .agg(
+        nearby_estabs_50mi_landadj=("neighbor_estabs_contribution", "sum"),
+        contributing_counties_50mi=("neighbor_county_id", "nunique"),
+        raw_overlap_sqmi_50mi=("overlap_area_sqmi", "sum"),
+        effective_land_overlap_sqmi_50mi=("effective_land_overlap_sqmi", "sum")
+    )
+)
+```
+
+
+```{python}
+years = pd.DataFrame({"year": list(range(2004, 2026))})
+
+all_county_years = (
+    counties_df[["county_id"]]
+    .drop_duplicates()
+    .assign(key=1)
+    .merge(years.assign(key=1), on="key")
+    .drop(columns="key")
+    .sort_values(["county_id", "year"])
+    .reset_index(drop=True)
+)
+
+nearby_dcs_final = all_county_years.merge(
+    nearby_dcs_final,
+    on=["county_id", "year"],
+    how="left"
+)
+```
+
+```{python}
+nearby_dcs_final["nearby_estabs_50mi_per_sqmi"] = (
+    nearby_dcs_final["nearby_estabs_50mi_landadj"] /
+    nearby_dcs_final["effective_land_overlap_sqmi_50mi"]
+)
+
+nearby_dcs_final["nearby_estabs_50mi_per_100_sqmi"] = (
+    nearby_dcs_final["nearby_estabs_50mi_per_sqmi"] * 100
+)
+```
+
+```{python}
+overlap_df.to_sql(
+    name=f"county_buffer_overlap_{BUFFER_MILES}mi",
+    con=engine,
+    schema="transformed",
+    if_exists="replace",
+    index=False
+)
+
+nearby_dcs_final.to_sql(
+    name=f"naics_518_nearby_estabs_{BUFFER_MILES}mi",
+    con=engine,
+    schema="transformed",
+    if_exists="replace",
+    index=False
+)
+```
