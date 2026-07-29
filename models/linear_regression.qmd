@@ -31,7 +31,7 @@ engine = create_engine(database_url)
 
 ```{python}
 # Load data
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("DUCKDB_DB_URL")
 
 con = duckdb.connect()
 con.execute("INSTALL postgres; LOAD postgres;")  
