@@ -216,6 +216,17 @@ nearby_dcs_final = all_county_years.merge(
 ```
 
 ```{python}
+nearby_dcs_final["nearby_estabs_50mi_per_sqmi"] = (
+    nearby_dcs_final["nearby_estabs_50mi_landadj"] /
+    nearby_dcs_final["effective_land_overlap_sqmi_50mi"]
+)
+
+nearby_dcs_final["nearby_estabs_50mi_per_100_sqmi"] = (
+    nearby_dcs_final["nearby_estabs_50mi_per_sqmi"] * 100
+)
+```
+
+```{python}
 overlap_df.to_sql(
     name=f"county_buffer_overlap_{BUFFER_MILES}mi",
     con=engine,
