@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 import importlib
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
-from concurrent.futures import ThreadPoolExecutor
 import duckdb
 importlib.reload(dbu)
 importlib.reload(mlu)
@@ -52,61 +51,6 @@ county_df = con.execute("SELECT * FROM my_db.us_counties").df()
 
 ## Create Table for Regressions
 
-### Helper Functions
-
-```{python}
-def county_average(df, include_cols = None):
-    if "county_id" not in df.columns:
-        raise ValueError("No `county_id` column found.")
-
-    if include_cols is None:
-        include_cols = [
-            col for col in df.columns
-            if col != "county_id" and is_numeric_dtype(df[col])
-        ]
-    else:
-        non_num_cols = [
-            col for col in include_cols 
-            if col =="county_id" or not is_numeric_dtype(df[col])
-            ]
-        if non_num_cols:
-            raise ValueError(f"Only numeric columns are allowed in `include_cols`. Non-numeric columns: {non_num_cols}")
-
-    # Since there are no years for datacenters, take average of all years for each county
-    out_df = (df[["county_id"] + include_cols].groupby("county_id", as_index = False).mean())
-
-    return out_df
-```
-
-```{python}
-def combine_dfs(base_df, dfs_to_join):
-    out_df = base_df.copy()
-
-    for i, df in enumerate(dfs_to_join):
-        if "county_id" not in df.columns:
-            raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
-
-        # Make sure all tables only have one row per county
-        dupes = df["county_id"][df[["county_id","year"]].duplicated()].unique()
-        if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id and year`. Problematic Counties: {list(dupes)}")
-
-        out_df = pd.merge(out_df, df, how = "left", on = ["county_id", "year"], validate = "one_to_one")
-
-    missing_summary_table = (
-        out_df.isna()
-        .mean()
-        .sort_values(ascending = False)
-        .rename("missing_share")
-        .reset_index()
-        .rename(columns={"index":"column"})
-    )
-
-    print("Missing Summary: \n", missing_summary_table)
-
-    return out_df
-```
-
 ### Create final table
 
 ```{python}
@@ -131,7 +75,7 @@ county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
 ```
 
 ```{python}
-final_df = combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
 ```
 
 ### Clean up final table
