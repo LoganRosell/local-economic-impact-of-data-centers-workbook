@@ -1,0 +1,22 @@
+---
+title: "Nearby Datacenters"
+format: html
+---
+
+```{python}
+from pathlib import Path
+import os
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+```
+
+```{python}
+load_dotenv()
+
+data_dir = Path(os.environ["DATA_DIR"])
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
