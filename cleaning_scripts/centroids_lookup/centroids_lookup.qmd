@@ -116,13 +116,6 @@ database_url = os.getenv("DATABASE_URL")
 ```
 
 ```{python}
-lookup_df.to_sql(
-    "county_distances_lookup",
-    con=engine,
-    if_exists="replace",
-    index=False
-)
-
 final_county_df.to_sql(
     "us_counties_spatial",
     con=engine,
