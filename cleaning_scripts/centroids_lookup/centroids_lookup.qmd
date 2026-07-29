@@ -124,8 +124,9 @@ lookup_df.to_sql(
 )
 
 final_county_df.to_sql(
-    "us_counties",
+    "us_counties_spatial",
     con=engine,
+    schema="transformed",
     if_exists="replace",
     index=False
 )

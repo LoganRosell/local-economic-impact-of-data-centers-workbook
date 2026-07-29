@@ -46,7 +46,7 @@ inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
 pop_df = con.execute("SELECT * FROM my_db.population").df()
 perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
 emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
-county_df = con.execute("SELECT * FROM my_db.us_counties").df()
+county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
 ```
 
 ## Create Table for Regressions
