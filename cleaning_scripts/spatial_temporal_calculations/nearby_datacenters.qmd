@@ -61,3 +61,14 @@ counties_geo = counties_geo[["id", "geometry"]].copy()
 counties_geo = counties_geo.rename(columns = {"id": "county_id"})
 ```
 
+```{python}
+counties_final = counties_df.merge(counties_geo, on = "county_id", how = "left")
+```
+
+```{python}
+counties_final = gpd.GeoDataFrame(counties_final, geometry="geometry", crs="EPSG:4326")
+
+counties_final = counties_final.to_crs(5070) 
+
+counties_final["geometry"] = counties_final.geometry.make_valid()
+```
