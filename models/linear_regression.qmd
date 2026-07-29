@@ -58,7 +58,7 @@ bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2
 
 pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
 
-final_bus_df = bus_county_year_df.merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, on=["county_id", "year"], how="left")
 
 final_bus_df = (
     final_bus_df
