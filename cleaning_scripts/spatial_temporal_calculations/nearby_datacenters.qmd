@@ -20,3 +20,44 @@ data_dir = Path(os.environ["DATA_DIR"])
 database_url = os.getenv("DATABASE_URL")
 engine = create_engine(database_url)
 ```
+
+```{python}
+BUFFER_MILES = 50
+BUFFER_METERS = BUFFER_MILES * 1609.344
+
+geojson_path = data_dir / "county_fips_codes" / "geojson_counties_fips.json"
+
+OVERLAP_TABLE = f"transformed.county_buffer_overlap_{BUFFER_MILES}mi"
+OUTPUT_TABLE = f"transformed.naics_518_nearby_estabs_{BUFFER_MILES}mi"
+
+SQM_PER_SQMI = 2_589_988.110336
+```
+
+```{python}
+counties_df = pd.read_sql("""
+    SELECT
+        county_id,
+        land_area_sqmi,
+        water_area_sqmi
+    FROM us_counties
+""", engine)
+
+dc_df = pd.read_sql("""
+    SELECT
+        county_id,
+        year,
+        estabs
+    FROM naics_518_establishments
+""", engine)
+```
+
+```{python}
+counties_geo = gpd.read_file(geojson_path)
+
+# Fix for mismatch of old county code 
+counties_geo["id"] = counties_geo["id"].replace({"46113": "46102"})
+
+counties_geo = counties_geo[["id", "geometry"]].copy()
+counties_geo = counties_geo.rename(columns = {"id": "county_id"})
+```
+
