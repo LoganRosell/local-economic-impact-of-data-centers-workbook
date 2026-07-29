@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import importlib
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
+from concurrent.futures import ThreadPoolExecutor
+import duckdb
 importlib.reload(dbu)
 importlib.reload(mlu)
 
@@ -30,16 +32,22 @@ engine = create_engine(database_url)
 
 ```{python}
 # Load data
-dc_df = pd.read_sql_table("naics_518_establishments", engine, schema="transformed")
-air_df = pd.read_sql_table("air_quality", engine, schema="transformed")
-bus_df = pd.read_sql_table("business_patterns", engine, schema="transformed")
-code_df = pd.read_sql_table("naics_code_look_up", engine)
-gdp_df = pd.read_sql_table("gdp", engine, schema="transformed")
-inc_df = pd.read_sql_table("personal_income", engine, schema="transformed")
-pop_df = pd.read_sql_table("population", engine)
-perm_df = pd.read_sql_table("res_construction_permits", engine, schema="transformed")
-emp_df = pd.read_sql_table("unemployment", engine, schema="transformed")
-county_df = pd.read_sql_table("us_counties", engine)
+database_url = os.getenv("DATABASE_URL")
+
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
+
+dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
+bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
+code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
+gdp_df = con.execute("SELECT * FROM my_db.transformed.gdp").df()
+inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
+pop_df = con.execute("SELECT * FROM my_db.population").df()
+perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
+emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
+county_df = con.execute("SELECT * FROM my_db.us_counties").df()
 ```
 
 ## Create Table for Regressions
@@ -102,7 +110,7 @@ def combine_dfs(base_df, dfs_to_join):
 ### Create final table
 
 ```{python}
-bus_county_year_df = dbu.all_county_years(county_df, year_start=2001, year_end=2022)
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
 
 pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
 
