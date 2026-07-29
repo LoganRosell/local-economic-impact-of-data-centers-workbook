@@ -476,11 +476,11 @@ def combine_dfs(base_df, dfs_to_join):
             raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
 
         # Make sure all tables only have one row per county
-        dupes = df["county_id"][df["county_id"].duplicated()].unique()
+        dupes = df["county_id"][df[["county_id","year"]].duplicated()].unique()
         if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)}")
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id and year`. Problematic Counties: {list(dupes)}")
 
-        out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+        out_df = pd.merge(out_df, df, how = "left", on = ["county_id", "year"], validate = "one_to_one")
 
     missing_summary_table = (
         out_df.isna()
