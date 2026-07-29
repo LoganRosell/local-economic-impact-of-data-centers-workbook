@@ -92,3 +92,18 @@ buffers["geometry"] = buffers.geometry.buffer(BUFFER_METERS)
 buffers = buffers.rename(columns={"county_id": "target_county_id"})
 ```
 
+```{python}
+candidate_pairs = gpd.sjoin(
+    buffers,
+    counties_final[["county_id", "geometry"]],
+    how = "inner",
+    predicate = "intersects"
+)
+
+candidate_pairs = candidate_pairs.rename(columns={"county_id": "neighbor_county_id"})
+candidate_pairs = candidate_pairs[
+    candidate_pairs["target_county_id"] != candidate_pairs["neighbor_county_id"]
+].copy()
+candidate_pairs = candidate_pairs[["target_county_id", "neighbor_county_id"]].drop_duplicates()
+```
+
