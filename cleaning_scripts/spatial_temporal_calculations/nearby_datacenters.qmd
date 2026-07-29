@@ -72,3 +72,16 @@ counties_final = counties_final.to_crs(5070)
 
 counties_final["geometry"] = counties_final.geometry.make_valid()
 ```
+
+```{python}
+counties_final["geom_area_sqmi"] = counties_final.geometry.area / SQM_PER_SQMI
+
+counties_final["total_area_sqmi"] = (
+    counties_final["land_area_sqmi"] +
+    counties_final["water_area_sqmi"]
+)
+
+counties_final["land_share"] = (
+    counties_final["land_area_sqmi"] / counties_final["total_area_sqmi"]
+)
+```
