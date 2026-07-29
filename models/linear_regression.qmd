@@ -72,6 +72,10 @@ final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
 ```{python}
 # Create county_year dataframe for merging below
 county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_year_df["water_area_sqmi"]
 ```
 
 ```{python}
