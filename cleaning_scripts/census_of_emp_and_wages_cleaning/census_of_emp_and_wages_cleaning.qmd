@@ -189,14 +189,6 @@ df_final = df_final.rename(columns = {"estabs_imputed": "estabs"})
 ```
 
 ```{python}
-df_final["estabs_per_sqmi"] = df_final["estabs"] / df_final["land_area_sqmi"]
-
-df_final["estabs_per_100_sqmi"] = df_final["estabs_per_sqmi"] * 100
-
-df_final = df_final.drop(columns = ["land_area_sqmi", "water_area_sqmi"])
-```
-
-```{python}
 # export cleaned data to sql table in local db
 df_final.to_sql(
     "naics_518_establishments",

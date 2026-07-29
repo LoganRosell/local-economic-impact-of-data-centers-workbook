@@ -35,7 +35,7 @@ gdp_df = pd.read_sql_table("gdp", engine)
 inc_df = pd.read_sql_table("personal_income", engine)
 perm_df = pd.read_sql_table("res_construction_permits", engine)
 emp_df = pd.read_sql_table("unemployment", engine)
-county_df = pd.read_sql_table("us_counties", engine)
+county_df = pd.read_sql_table("us_counties_spatial", engine, schema = "transformed")
 dc_df = pd.read_sql_table("naics_518_establishments", engine)
 ```
 
@@ -95,6 +95,16 @@ dc_df = dc_df.drop(columns=[
     "estabs_spatial_asinh_lag1",
     "estabs_yoy_change"
 ])
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+dc_df = county_year_df.merge(dc_df, on = ["county_id", "year"], how = "left")
+
+dc_df["estabs_per_sqmi"] = dc_df["estabs"] / dc_df["land_area_sqmi"]
+
+dc_df["estabs_per_100_sqmi"] = dc_df["estabs_per_sqmi"] * 100
+
+dc_df = dc_df.drop(columns = ["land_area_sqmi", "water_area_sqmi"])
 ```
 
 ```{python}
