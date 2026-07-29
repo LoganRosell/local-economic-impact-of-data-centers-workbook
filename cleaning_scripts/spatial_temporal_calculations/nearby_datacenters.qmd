@@ -85,3 +85,10 @@ counties_final["land_share"] = (
     counties_final["land_area_sqmi"] / counties_final["total_area_sqmi"]
 )
 ```
+
+```{python}
+buffers = counties_final[["county_id", "geometry"]].copy()
+buffers["geometry"] = buffers.geometry.buffer(BUFFER_METERS) 
+buffers = buffers.rename(columns={"county_id": "target_county_id"})
+```
+
