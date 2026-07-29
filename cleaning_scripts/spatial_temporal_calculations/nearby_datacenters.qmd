@@ -194,3 +194,24 @@ nearby_dcs_final = (
 )
 ```
 
+
+```{python}
+years = pd.DataFrame({"year": list(range(2004, 2026))})
+
+all_county_years = (
+    counties_df[["county_id"]]
+    .drop_duplicates()
+    .assign(key=1)
+    .merge(years.assign(key=1), on="key")
+    .drop(columns="key")
+    .sort_values(["county_id", "year"])
+    .reset_index(drop=True)
+)
+
+nearby_dcs_final = all_county_years.merge(
+    nearby_dcs_final,
+    on=["county_id", "year"],
+    how="left"
+)
+```
+
