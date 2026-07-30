@@ -183,7 +183,11 @@ regression_cols = [
     "tot_employee_count_professional_per_capita",
     "tot_employee_count_public_services_per_capita",
     "tot_employee_count_primary_industries_per_capita",
-    "tot_employee_count_trade_transport_per_capita"
+    "tot_employee_count_trade_transport_per_capita",
+
+    # County Size
+    "land_area_sqmi",
+    "total_area_sqmi"
 ]
 
 regression_df = final_df[regression_cols].copy()
