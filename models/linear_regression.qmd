@@ -109,6 +109,14 @@ per_capita_cols = [
 ] + cols
 
 final_df = mlu.make_per_capita(final_df, per_capita_cols)
+
+final_df["single_family_permits_per_1000"] = (
+    final_df["single_family_permits_per_capita"] * 1000
+)
+
+final_df["all_multifamily_permits_per_1000"] = (
+    final_df["all_multifamily_permits_per_capita"] * 1000
+)
 ```
 
 ```{python}
@@ -162,8 +170,8 @@ regression_cols = [
     "real_gdp_2017_dollars_thousands_per_capita",
     "personal_income_thousands_of_dollars_per_capita",
     "unemployment_rate_pct",
-    "single_family_permits_per_capita",
-    "all_multifamily_permits_per_capita",
+    "single_family_permits_per_1000",
+    "all_multifamily_permits_per_1000",
 
     # environmental
     "pm25_mean_daily_avg",
