@@ -12,6 +12,7 @@ from sklearn.linear_model import LassoCV
 import statsmodels.formula.api as smf
 from scipy.stats import probplot
 import statsmodels.api as sm 
+import linearmodels as lm
 
 # slice df to specific year
 def return_specific_year(df, year):
@@ -576,30 +577,25 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
         - Always clusters by county
     """
 
-    needed_cols = [y_col] + x_cols
-    if county_fe:
-        needed_cols.append("county_id")
-    if year_fe:
-        needed_cols.append("year")
+    reg_df = df.dropna(subset=[y_col] + x_cols).copy()
 
-    needed_cols = list(dict.fromkeys(needed_cols))
-    reg_df = df[needed_cols].dropna().copy()
+    reg_df_panel  = reg_df.set_index(["county_id", "year"])
 
-    rhs_terms = x_cols.copy()
-    if county_fe:
-        rhs_terms.append("C(county_id)")
-    if year_fe:
-        rhs_terms.append("C(year)")
+    y = reg_df_panel[y_col]
+    X = reg_df_panel[x_cols]
 
-    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
+    entity_effects = county_fe
+    time_effects = year_fe
 
-    model = smf.ols(formula=formula, data=reg_df).fit(
-            cov_type="cluster",
-            cov_kwds={"groups": reg_df["county_id"]}
-        )
+    model = lm.PanelOLS(
+        y,
+        X,
+        entity_effects = entity_effects,
+        time_effects = time_effects
+    ).fit(cov_type = "clustered", cluster_entity=True)
 
-    fitted = model.fittedvalues
-    resid = model.resid
+    fitted = model.fitted_values
+    resid = model.resids
 
     ci = model.conf_int()
     ci.columns = ["ci_low", "ci_high"]
@@ -612,18 +608,13 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
         "ci_high": ci["ci_high"].values
     })
 
-    summary_df = summary_df[~summary_df["term"].str.startswith("C(")].copy()
-
     summary_df["pvalue"] = summary_df["pvalue"].apply(lambda x: f"{x:.6f}" if x >= 0.000001 else "<0.000001")
     summary_df["coef"] = summary_df["coef"].round(6)
     summary_df["ci_low"] = summary_df["ci_low"].round(6)
     summary_df["ci_high"] = summary_df["ci_high"].round(6)
 
-    print("Formula:")
-    print(formula)
-    print("\nModel Summary (Excluding Fixed Effect Rows):")
-    print(model.summary().tables[0])
-    print(summary_df.to_string(index=False))
+    print("\nModel:")
+    print(model.summary)
 
     plot_regression_coeffs(model, y_col, reg_df)
 
@@ -658,8 +649,7 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
 
     return {
         "model": model,
-        "reg_df": reg_df,
-        "formula": formula
+        "reg_df": reg_df
     }
 
 def print_regression_analysis(result, y_col, reg_dc_cols, reg_dc_density_cols_lag):
@@ -680,8 +670,8 @@ def print_regression_analysis(result, y_col, reg_dc_cols, reg_dc_density_cols_la
 
     print("\n" + "-" * 100)
     print(f"RESULTS FOR REGRESSION ON: {y_col}")
-    print(f"R2: {model.rsquared:.4f}")
-    print(f"Adj. R2: {model.rsquared_adj:.4f}")
+    print(f"R2 (Within): {model.rsquared_within:.4f}")
+    print(f"R2 (Overall): {model.rsquared:.4f}")
     print("\nData center coefficients:")
     print(dc_table.to_string(index=False))
 
