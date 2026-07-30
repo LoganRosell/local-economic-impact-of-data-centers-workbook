@@ -332,6 +332,13 @@ def apply_suggested_transforms(df, eda_df, cols_to_exclude = None):
 
     return df
 
+def _pick_best_from_group(lasso_coef_df, candidates):
+    temp = lasso_coef_df[lasso_coef_df["feature"].isin(candidates)].copy()
+    if temp.empty:
+        return []
+    else:
+        return [temp.sort_values("abs_coef", ascending=False)["feature"].iloc[0]]
+
 def run_lasso(df, y_col, exclude_cols = None):
     """
     Runs lasso in a dataframe against a specified response variable,
@@ -380,6 +387,62 @@ def run_lasso(df, y_col, exclude_cols = None):
     coef_df = coef_df[coef_df["coef"] != 0].reset_index(drop = True)
 
     return coef_df
+
+def select_grouped_features(
+    lasso_coef_df,
+    reg_dc_cols,
+    reg_dc_density_cols,
+    reg_size_cols,
+    reg_sector_cols,
+    reg_pop_col,
+    reg_econ_cols,
+    reg_env_cols,
+    reg_permit_cols,
+    include_information=False):      
+    """
+    Apply pre-defined grouping rules to lasso output
+    """
+    selected = set(lasso_coef_df["feature"].tolist())
+
+    final_x = []
+
+    # data center logic
+    if not reg_dc_cols:
+        final_x.extend([c for c in reg_dc_density_cols])
+    else:
+        has_dc_count = any(c in selected for c in reg_dc_cols)
+        has_dc_density = any(c in selected for c in reg_dc_density_cols)
+        has_size_col = any(c in selected for c in reg_size_cols)
+
+        use_density = not (has_dc_count or has_size_col) and has_dc_density
+
+        if use_density:
+            final_x.extend([c for c in reg_dc_density_cols])
+        else:
+            final_x.extend([c for c in reg_dc_cols])
+            final_x.extend(_pick_best_from_group(lasso_coef_df, reg_size_cols))
+
+    # Population only if selected
+    final_x.extend([c for c in reg_pop_col if c in selected])
+
+    # Econ: any number
+    final_x.extend([c for c in reg_econ_cols if c in selected])
+
+    # Environmental: only one
+    final_x.extend(_pick_best_from_group(lasso_coef_df, reg_env_cols))
+
+    # Permits: only one
+    final_x.extend(_pick_best_from_group(lasso_coef_df, reg_permit_cols))
+
+    # Sectors: only if selected, but exclude information unless explicitly allowed
+    sector_keep = reg_sector_cols.copy()
+    if not include_information:
+        sector_keep = [c for c in sector_keep if "information" not in c]
+
+    final_x.extend([c for c in sector_keep if c in selected])
+
+    final_x = list(dict.fromkeys(final_x))
+    return final_x
 def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     """
     Runs a linear regression and prints the regression output,
