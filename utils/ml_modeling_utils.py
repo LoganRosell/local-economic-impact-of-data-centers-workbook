@@ -733,6 +733,22 @@ def run_lasso_plus_regression(
         verbose = True
     )
 
+    dc_lasso_dfs = []
+    for dc_col in all_dc_cols:
+        dc_exclude = exclude_from_lasso + [y_col, dc_col]
+        dc_lasso_df = run_lasso(
+            df=df,
+            y_col=dc_col,
+            exclude_cols=dc_exclude,
+            verbose = False
+        )
+        dc_lasso_dfs.append(dc_lasso_df)
+
+    if dc_lasso_dfs:
+        combined_lasso_df = pd.concat([lasso_coef_df] + dc_lasso_dfs)
+        combined_lasso_df = combined_lasso_df.drop_duplicates(subset="feature").reset_index(drop=True)
+        lasso_coef_df = combined_lasso_df
+
     selected_x = select_grouped_features(
         lasso_coef_df=lasso_coef_df,
         reg_dc_cols=reg_dc_cols,
