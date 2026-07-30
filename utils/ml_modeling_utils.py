@@ -334,10 +334,15 @@ def apply_suggested_transforms(df, eda_df, cols_to_exclude = None):
 
 def run_lasso(df, y_col, exclude_cols = None):
     """
-    Runs lasso in report mode on a dataframe against a specified response variable,
+    Runs lasso in a dataframe against a specified response variable,
     which helps narrow down variables that may be predictive of that response variable.
     Variables with a higher coefficient should be included,
     whereas variables at or near zero should be considered for exclusion from the final model.
+
+    Parameters:
+        - df: input dataframe
+        - y_col: the response variable to run lasso against
+        - exclude_cols: columns to explicitly exclude from lasso
     """
     target_col = y_col
 
@@ -349,7 +354,7 @@ def run_lasso(df, y_col, exclude_cols = None):
     lasso_df = df.dropna().copy()
     lasso_df.columns = lasso_df.columns.map(str)
 
-    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
+    x_cols = [c for c in lasso_df.columns if c not in drop_cols]
     
     X = lasso_df[x_cols]
     y = lasso_df[target_col]
@@ -365,10 +370,16 @@ def run_lasso(df, y_col, exclude_cols = None):
     coef_df = pd.DataFrame({
         "feature": x_cols,
         "coef": lasso_model.coef_
-    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
+    })
+
+    coef_df["abs_coef"] = coef_df["coef"].abs()
+    coef_df = coef_df.sort_values("abs_coef", ascending = False).reset_index(drop=True)
 
     print(coef_df.to_string(index=False))
 
+    coef_df = coef_df[coef_df["coef"] != 0].reset_index(drop = True)
+
+    return coef_df
 def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     """
     Runs a linear regression and prints the regression output,
