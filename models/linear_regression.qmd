@@ -218,21 +218,58 @@ regression_df["year_num"] = regression_df["year"] - regression_df["year"].min()
 ```
 
 ```{python}
+# Define potential useful groupings
+reg_dc_cols = [
+    "datacenters",
+    "nearby_datacenters_50mi"
+] # Always include both of these (lagged 2 year), unless size_cols are used
 
+reg_dc_density_cols = [
+    "datacenters_per_100_sqmi",
+    "nearby_datacenters_50mi_per_100_sqmi"
+] # Only include these if size_cols are not used (lagged 2 year), and if more significant than dc_col. If one is used, always use the other
 
+reg_size_cols = [
+    "land_area_sqmi_log",
+    "total_area_sqmi_log"
+] # Only include the more significant one
 
+reg_sector_cols = [
     "tot_employee_count_industrial_per_capita_log1p",
+    "tot_employee_count_information_per_capita_log1p",
     "tot_employee_count_professional_per_capita_log1p",
     "tot_employee_count_public_services_per_capita_log1p",
     "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_trade_transport_per_capita_log1p"
+] # Can include any number of these, always exclude information unless explicitly specified
 
+reg_pop_col = [
+    "population_log"
+] # Only include if significant
 
+reg_econ_cols = [
     "real_gdp_2017_dollars_thousands_per_capita_log",
     "personal_income_thousands_of_dollars_per_capita_log",
+    "unemployment_rate_pct"
+] # Can include any number of these
 
+reg_env_cols = [
+    "pm25_mean_daily_avg",
+    "pm25_mean_daily_avg_spatial_weighted_avg_5"
+] # Only include one of these
 
+reg_permit_cols = [
+    "single_family_permits_per_1000_log1p",
+    "all_multifamily_permits_per_1000_log1p"
+] # Only include one of these
 
+reg_key_cols = [
+    "county_id",
+    "year"
+] # Don't ever include except as fixed effect
+```
 
+## Linear Regressions
 
 
 ```{python}
