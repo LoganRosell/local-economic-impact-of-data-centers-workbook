@@ -229,7 +229,7 @@ def all_county_years(county_df, year_start=2002, year_end=2022):
         - year_end: last year to include (inclusive)
 
     Returns:
-        - DataFrame with columns ['county_id', 'year'] containing every
+        - DataFrame with at least columns ['county_id', 'year'] containing every
           county_id from county_df crossed with every year in the range.
     """
 
@@ -241,8 +241,6 @@ def all_county_years(county_df, year_start=2002, year_end=2022):
     years["key"] = 1
 
     out = county_df.merge(years, on="key", how="outer").drop(columns="key")
-
-    out = out[["county_id", "year"]]
 
     out = out.sort_values(["county_id", "year"]).reset_index(drop=True)
 

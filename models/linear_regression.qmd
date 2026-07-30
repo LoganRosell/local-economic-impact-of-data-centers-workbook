@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 import importlib
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
-from concurrent.futures import ThreadPoolExecutor
 import duckdb
 importlib.reload(dbu)
 importlib.reload(mlu)
@@ -32,13 +31,14 @@ engine = create_engine(database_url)
 
 ```{python}
 # Load data
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("DUCKDB_DB_URL")
 
 con = duckdb.connect()
 con.execute("INSTALL postgres; LOAD postgres;")  
 con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
 
 dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+near_dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
 air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
 bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
 code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
@@ -47,65 +47,10 @@ inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
 pop_df = con.execute("SELECT * FROM my_db.population").df()
 perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
 emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
-county_df = con.execute("SELECT * FROM my_db.us_counties").df()
+county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
 ```
 
 ## Create Table for Regressions
-
-### Helper Functions
-
-```{python}
-def county_average(df, include_cols = None):
-    if "county_id" not in df.columns:
-        raise ValueError("No `county_id` column found.")
-
-    if include_cols is None:
-        include_cols = [
-            col for col in df.columns
-            if col != "county_id" and is_numeric_dtype(df[col])
-        ]
-    else:
-        non_num_cols = [
-            col for col in include_cols 
-            if col =="county_id" or not is_numeric_dtype(df[col])
-            ]
-        if non_num_cols:
-            raise ValueError(f"Only numeric columns are allowed in `include_cols`. Non-numeric columns: {non_num_cols}")
-
-    # Since there are no years for datacenters, take average of all years for each county
-    out_df = (df[["county_id"] + include_cols].groupby("county_id", as_index = False).mean())
-
-    return out_df
-```
-
-```{python}
-def combine_dfs(base_df, dfs_to_join):
-    out_df = base_df.copy()
-
-    for i, df in enumerate(dfs_to_join):
-        if "county_id" not in df.columns:
-            raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
-
-        # Make sure all tables only have one row per county
-        dupes = df["county_id"][df[["county_id","year"]].duplicated()].unique()
-        if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id and year`. Problematic Counties: {list(dupes)}")
-
-        out_df = pd.merge(out_df, df, how = "left", on = ["county_id", "year"], validate = "one_to_one")
-
-    missing_summary_table = (
-        out_df.isna()
-        .mean()
-        .sort_values(ascending = False)
-        .rename("missing_share")
-        .reset_index()
-        .rename(columns={"index":"column"})
-    )
-
-    print("Missing Summary: \n", missing_summary_table)
-
-    return out_df
-```
 
 ### Create final table
 
@@ -114,7 +59,7 @@ bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2
 
 pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
 
-final_bus_df = bus_county_year_df.merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, on=["county_id", "year"], how="left")
 
 final_bus_df = (
     final_bus_df
@@ -128,10 +73,18 @@ final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
 ```{python}
 # Create county_year dataframe for merging below
 county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_year_df["water_area_sqmi"]
 ```
 
 ```{python}
-final_df = combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
+near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landadj"].round()
+```
+
+```{python}
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
 ```
 
 ### Clean up final table
@@ -156,6 +109,14 @@ per_capita_cols = [
 ] + cols
 
 final_df = mlu.make_per_capita(final_df, per_capita_cols)
+
+final_df["single_family_permits_per_1000"] = (
+    final_df["single_family_permits_per_capita"] * 1000
+)
+
+final_df["all_multifamily_permits_per_1000"] = (
+    final_df["all_multifamily_permits_per_capita"] * 1000
+)
 ```
 
 ```{python}
@@ -169,6 +130,9 @@ final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_a
 final_df = final_df.rename(columns = {
     "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
     "estabs": "datacenters",
+    "estabs_per_100_sqmi": "datacenters_per_100_sqmi",
+    "nearby_estabs_50mi_landadj": "nearby_datacenters_50mi",
+    "nearby_estabs_50mi_per_100_sqmi": "nearby_datacenters_50mi_per_100_sqmi",
     "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
     "unemployment_rate": "unemployment_rate_pct"
     })
@@ -197,17 +161,17 @@ regression_cols = [
 
     # treatment
     "datacenters",
-    "datacenters_spatial_weighted_avg_5",
-    "datacenters_per_capita",
-    "datacenters_spatial_per_capita",
+    "datacenters_per_100_sqmi",
+    "nearby_datacenters_50mi",
+    "nearby_datacenters_50mi_per_100_sqmi",
 
     # core controls
     "population",
     "real_gdp_2017_dollars_thousands_per_capita",
     "personal_income_thousands_of_dollars_per_capita",
     "unemployment_rate_pct",
-    "single_family_permits_per_capita",
-    "all_multifamily_permits_per_capita",
+    "single_family_permits_per_1000",
+    "all_multifamily_permits_per_1000",
 
     # environmental
     "pm25_mean_daily_avg",
@@ -219,7 +183,11 @@ regression_cols = [
     "tot_employee_count_professional_per_capita",
     "tot_employee_count_public_services_per_capita",
     "tot_employee_count_primary_industries_per_capita",
-    "tot_employee_count_trade_transport_per_capita"
+    "tot_employee_count_trade_transport_per_capita",
+
+    # County Size
+    "land_area_sqmi",
+    "total_area_sqmi"
 ]
 
 regression_df = final_df[regression_cols].copy()
@@ -231,13 +199,17 @@ summary_df
 ```
 
 ```{python}
-regression_df = mlu.apply_suggested_transforms(regression_df, summary_df, cols_to_exclude = ["datacenters", "datacenters_spatial_weighted_avg_5"])
+all_dc_cols = ["datacenters", "nearby_datacenters_50mi", "datacenters_per_100_sqmi", "nearby_datacenters_50mi_per_100_sqmi"]
+```
+
+```{python}
+regression_df = mlu.apply_suggested_transforms(regression_df, summary_df, cols_to_exclude = all_dc_cols)
 regression_df
 ```
 
 ```{python}
-regression_df = mlu.add_lags(regression_df, "datacenters", lags=(1, 2, 3))
-regression_df = mlu.add_lags(regression_df, "datacenters_spatial_weighted_avg_5", lags=(1, 2, 3))
+for col in all_dc_cols:
+    regression_df = mlu.add_lags(regression_df, col, lags=(1, 2, 3))
 ```
 
 ```{python}
@@ -246,399 +218,118 @@ regression_df["year_num"] = regression_df["year"] - regression_df["year"].min()
 ```
 
 ```{python}
-datacenter_cols = [col for col in regression_df.columns if 'datacenter' in col]
-
-exclude_from_lasso = ["year_num"] + [
-    c for c in datacenter_cols
-    if c not in {"datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"}
-]
-```
-
-## Linear Regressions
-
-### Unemployment
-
-```{python}
-mlu.run_lasso(regression_df, "unemployment_rate_pct")
-```
-
-```{python}
-unemp_cols = ["pm25_mean_daily_avg_spatial_weighted_avg_5",
-    "personal_income_thousands_of_dollars_per_capita_log",
-    "tot_employee_count_industrial_per_capita_log1p",
-    "single_family_permits_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_professional_per_capita_log1p",
-    "real_gdp_2017_dollars_thousands_per_capita_log"
-    ]
-```
-
-```{python}
-mlu.show_correlation_heat_map(regression_df[unemp_cols])
-```
-
-```{python}
-mlu.column_selector(
-    regression_df[unemp_cols],
-    outlier_sd_cut_off = 3.0,
-    only_normal = True,
-    return_report = True
-    )
-```
-
-```{python}
-# Baseline
-x_base = unemp_cols + ["datacenters", "datacenters_spatial_weighted_avg_5"]
-model_base = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_base)
-
-x_lag1 = unemp_cols + ["datacenters_lag1", "datacenters_spatial_weighted_avg_5_lag1"]
-model_lag1 = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag1)
-
-x_lag2 = unemp_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag2)
-
-x_lag3 = unemp_cols + ["datacenters_lag3", "datacenters_spatial_weighted_avg_5_lag3"]
-model_lag3 = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag3)
-```
-
-```{python}
-mlu.compare_models(
-    [model_base, model_lag1, model_lag2, model_lag3],
-    ["base", "lag1", "lag2", "lag3"]
-)
-```
-
-
-```{python}
-x_lag2_trend = unemp_cols + ["year_num", "datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-
-model_lag2_trend = mlu.run_linear_regression(regression_df, "unemployment_rate_pct", x_lag2_trend, year_fe = False)
-```
-
-```{python}
-mlu.compare_models(
-    [model_lag2, model_lag2_trend],
-    ["fixed effect year", "yearly trend"]
-)
-```
-
-#### Analysis
-
-For this regression I tested a few different types of models, including different lags and a fixed effect vs. yearly trend. Ultimately, a two-year fixed effect had the best results. For consistency in analysis, I used this two-year fixed effect for all other models.
-
-Findings:
-
-* R2 = 0.847
-* 2 year lagged data centers had p-value of 0.004 and coefficient of 0.0033
-    * This can be interpreted as one new datacenter being correlated with a 0.0033% increase in unemployment
-* 2 year lagged *spatial* data centers had a p-value of 0.186
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with unemployment
-* There is a bit of a wedge shape towards 0 with the residuals graph, but otherwise residuals look fairly evenly distributed
-* The Q-Q plot has some variance on the left tail, and fairly high variance on the right tail.
-* All VIFs are well below 5
-
-
-### Personal Income
-
-```{python}
-mlu.run_lasso(regression_df, "personal_income_thousands_of_dollars_per_capita_log", exclude_cols = exclude_from_lasso)
-```
-
-```{python}
-inc_cols = [
-    "real_gdp_2017_dollars_thousands_per_capita_log",
-    "unemployment_rate_pct",
-    "tot_employee_count_professional_per_capita_log1p",
-    "single_family_permits_per_capita_log1p",
-    "pm25_mean_daily_avg",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_trade_transport_per_capita_log1p",
-    "tot_employee_count_primary_industries_per_capita_log1p"
-    ]
-```
-
-```{python}
-x_lag2 = inc_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "personal_income_thousands_of_dollars_per_capita_log", x_lag2)
-```
-
-#### Analysis
-
-Findings:
-
-* R2 = 0.965
-* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.0004 
-    * This can be interpreted as one new datacenter being correlated with a 0.04% increase in personal income
-* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0007
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.07% increase in personal income
-* Overall the residuals look fairly evenly distributed other than 2 clumps near 0 and 2
-* The Q-Q plot has fairly high variance on both ends
-* All VIFs are well below 5
-
-### Single Family Permits
-
-```{python}
-mlu.run_lasso(regression_df, "single_family_permits_per_capita_log1p", exclude_cols = exclude_from_lasso)
-```
-
-```{python}
-con_cols = [
-    "real_gdp_2017_dollars_thousands_per_capita_log",
-    "unemployment_rate_pct",
-    "tot_employee_count_professional_per_capita_log1p",
-    "pm25_mean_daily_avg",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_trade_transport_per_capita_log1p",
-    "tot_employee_count_primary_industries_per_capita_log1p",
-    "personal_income_thousands_of_dollars_per_capita_log",
-    "tot_employee_count_industrial_per_capita_log1p",
-    ]
-```
-
-```{python}
-x_lag2 = con_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "single_family_permits_per_capita_log1p", x_lag2)
-```
-
-#### Analysis
-
-Findings:
-
-* R2 = 0.773
-* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000008738
-    * This can be interpreted as one new datacenter being correlated with a 0.00088% increase in single family permits
-* 2 year lagged *spatial* data centers had a p-value of 0.886
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with single family permits
-* There is a bit of a wedge shape towards 0 with the residuals graph, but otherwise residuals look fairly evenly distributed
-* The Q-Q plot has fairly high variance on both ends
-* All VIFs are well below 5
-
-### Multifamily Permits
-
-```{python}
-mlu.run_lasso(regression_df, "all_multifamily_permits_per_capita_log1p", exclude_cols = exclude_from_lasso)
-```
-
-```{python}
-multi_con_cols = [
-    "real_gdp_2017_dollars_thousands_per_capita_log",
-    "unemployment_rate_pct",
-    "tot_employee_count_professional_per_capita_log1p",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_trade_transport_per_capita_log1p",
-    "tot_employee_count_industrial_per_capita_log1p",
-    ]
-```
-
-```{python}
-x_lag2 = multi_con_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "all_multifamily_permits_per_capita_log1p", x_lag2)
-```
-
-#### Analysis
-
-Findings:
-
-* R2 = 0.347
-* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.000009731
-    * This can be interpreted as one new datacenter being correlated with a 0.00097% increase in multifamily permits
-* 2 year lagged *spatial* data centers had a p-value of 0.288
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers having no significant correlation with multifamily permits
-* The residuals graph is highly irregular and has clear patterns
-* The Q-Q plot has very high variance on both ends
-* All VIFs are well below 5
-
-### GDP
-
-```{python}
-mlu.run_lasso(regression_df, "real_gdp_2017_dollars_thousands_per_capita_log", exclude_cols = exclude_from_lasso)
-```
-
-```{python}
-gdp_cols = [
-    "tot_employee_count_professional_per_capita_log1p",
-    "pm25_mean_daily_avg_spatial_weighted_avg_5",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_trade_transport_per_capita_log1p",
-    "tot_employee_count_primary_industries_per_capita_log1p",
-    "tot_employee_count_industrial_per_capita_log1p",
-    "single_family_permits_per_capita_log1p"
-    ]
-```
-
-```{python}
-x_lag2 = gdp_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "real_gdp_2017_dollars_thousands_per_capita_log", x_lag2)
-```
-
-#### Analysis
-
-Findings:
-
-* R2 = 0.935
-* 2 year lagged data centers had p-value of 0.000 and coefficient of 0.0010
-    * This can be interpreted as one new datacenter being correlated with a 0.10% increase in gdp
-* 2 year lagged *spatial* data centers had a p-value of 0.001 and a coefficient of 0.0009
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.09% increase in gdp
-* The residuals graph is mostly regularly distributed with some outliers on the right side
-* The Q-Q plot has somewhat high variance on both ends
-* All VIFs are well below 5
-
-### Air Quality
-
-```{python}
-exclude_air = exclude_from_lasso + ["pm25_mean_daily_avg_spatial_weighted_avg_5"]
-
-mlu.run_lasso(regression_df, "pm25_mean_daily_avg", exclude_cols = exclude_air)
-```
-
-```{python}
-air_cols = [
-    "tot_employee_count_professional_per_capita_log1p",
-    "unemployment_rate_pct",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_primary_industries_per_capita_log1p",
-    "tot_employee_count_industrial_per_capita_log1p",
-    "single_family_permits_per_capita_log1p",
-    "personal_income_thousands_of_dollars_per_capita_log",
-    "real_gdp_2017_dollars_thousands_per_capita_log"
-    ]
-```
-
-```{python}
-x_lag2 = air_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "pm25_mean_daily_avg", x_lag2)
-```
-
-#### Analysis
-
-Findings:
-
-* R2 = 0.819
-* 2 year lagged data centers had p-value of 0.879
-    * This can be interpreted as one new datacenter not being correlated with an change in air quality
-* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0071
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.0071 point increase in mean daily avg pm25. 
-* The residuals graph is very regularly distributed
-* The Q-Q plot has somewhat some small variance on the left side and high variance on the right side
-* All VIFs are well below 5
-
-### Spatial Air Quality
-
-```{python}
-exclude_air = exclude_from_lasso + ["pm25_mean_daily_avg"]
-
-mlu.run_lasso(regression_df, "pm25_mean_daily_avg_spatial_weighted_avg_5", exclude_cols = exclude_air)
-```
-
-```{python}
-spatial_air_cols = [
-    "tot_employee_count_professional_per_capita_log1p",
-    "unemployment_rate_pct",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_primary_industries_per_capita_log1p",
-    "tot_employee_count_industrial_per_capita_log1p",
-    "single_family_permits_per_capita_log1p",
-    "personal_income_thousands_of_dollars_per_capita_log",
-    "real_gdp_2017_dollars_thousands_per_capita_log"
-    ]
-```
-
-```{python}
-x_lag2 = spatial_air_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-model_lag2 = mlu.run_linear_regression(regression_df, "pm25_mean_daily_avg_spatial_weighted_avg_5", x_lag2)
-```
-
-#### Analysis
-
-Findings:
-
-* R2 = 0.817
-* 2 year lagged data centers had p-value of 0.384
-    * This can be interpreted as one new datacenter not being correlated with an change in the inverse-distance weighted average of air quality
-* 2 year lagged *spatial* data centers had a p-value of 0.000 and a coefficient of 0.0069
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 0.0069 point increase in the inverse-distance weighted average of mean daily avg pm25. 
-* The residuals graph is very regularly distributed
-* The Q-Q plot has somewhat some small variance on the left side and high variance on the right side
-* All VIFs are well below 5
-
-### Business Sectors
-
-```{python}
-business_sectors = [
+# Define potential useful groupings
+reg_dc_cols = [
+    "datacenters",
+    "nearby_datacenters_50mi"
+] # Always include both of these (lagged 2 year), unless size_cols are used
+
+reg_dc_density_cols = [
+    "datacenters_per_100_sqmi",
+    "nearby_datacenters_50mi_per_100_sqmi"
+] # Only include these if size_cols are not used (lagged 2 year), and if more significant than dc_col. If one is used, always use the other
+
+reg_size_cols = [
+    "land_area_sqmi_log",
+    "total_area_sqmi_log"
+] # Only include the more significant one
+
+reg_sector_cols = [
     "tot_employee_count_industrial_per_capita_log1p",
     "tot_employee_count_information_per_capita_log1p",
     "tot_employee_count_professional_per_capita_log1p",
     "tot_employee_count_public_services_per_capita_log1p",
     "tot_employee_count_primary_industries_per_capita_log1p",
     "tot_employee_count_trade_transport_per_capita_log1p"
-]
-```
+] # Can include any number of these, always exclude information unless explicitly specified
 
-```{python}
-for sector in business_sectors: 
-    print("Sector: ", sector)
-    mlu.run_lasso(regression_df, sector, exclude_cols = exclude_from_lasso)
-    print("\n")
-```
+reg_pop_col = [
+    "population_log"
+] # Only include if significant
 
-```{python}
-sector_cols = [
-    "tot_employee_count_professional_per_capita_log1p",
-    "unemployment_rate_pct",
-    "tot_employee_count_public_services_per_capita_log1p",
-    "population_log",
-    "tot_employee_count_primary_industries_per_capita_log1p",
-    "tot_employee_count_industrial_per_capita_log1p",
-    "single_family_permits_per_capita_log1p",
-    "all_multifamily_permits_per_capita_log1p",
-    "personal_income_thousands_of_dollars_per_capita_log",
+reg_econ_cols = [
     "real_gdp_2017_dollars_thousands_per_capita_log",
-    "tot_employee_count_trade_transport_per_capita_log1p",
-    "pm25_mean_daily_avg"
-    ]
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "unemployment_rate_pct"
+] # Can include any number of these
+
+reg_env_cols = [
+    "pm25_mean_daily_avg",
+    "pm25_mean_daily_avg_spatial_weighted_avg_5"
+] # Only include one of these
+
+reg_permit_cols = [
+    "single_family_permits_per_1000_log1p",
+    "all_multifamily_permits_per_1000_log1p"
+] # Only include one of these
+
+reg_key_cols = [
+    "county_id",
+    "year"
+] # Don't ever include except as fixed effect
 ```
+
+## Linear Regressions
+
 
 ```{python}
-for sector in business_sectors:
-    target_sector_cols = [c for c in sector_cols
-    if c not in {sector}]
+outcomes = [
+    "unemployment_rate_pct",
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "single_family_permits_per_1000_log1p",
+    "all_multifamily_permits_per_1000_log1p",
+    "real_gdp_2017_dollars_thousands_per_capita_log",
+    "pm25_mean_daily_avg",
+    "pm25_mean_daily_avg_spatial_weighted_avg_5",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "tot_employee_count_information_per_capita_log1p",
+    "tot_employee_count_professional_per_capita_log1p",
+    "tot_employee_count_public_services_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_trade_transport_per_capita_log1p",
+    "population_log"
+]
 
-    x_lag2 = target_sector_cols + ["datacenters_lag2", "datacenters_spatial_weighted_avg_5_lag2"]
-    model_lag2 = mlu.run_linear_regression(regression_df, sector, x_lag2)
+for y_col in outcomes:
+    print("\n" + "=" * 100)
+    print(f"RUNNING REGRESSION ON: {y_col}")
+    print("=" * 100)
+
+    exclude_from_lasso = ["year_num"] + reg_dc_cols + reg_size_cols
+    
+    if y_col in reg_env_cols:
+        # Don't let neighboring environmental factors predict county environmental factors (and vice versa)
+        exclude_from_lasso.extend(reg_env_cols)
+
+    if y_col in reg_permit_cols:
+        # Too closely related
+        exclude_from_lasso.extend(reg_permit_cols)
+
+    if y_col in reg_pop_col: 
+        # Don't let residential permits predict population (population is upstream cause)
+        exclude_from_lasso.extend(reg_permit_cols)
+        # Don't let per-capita variables predict population (they're already derived from pop)
+        exclude_from_lasso.extend(reg_sector_cols + ["real_gdp_2017_dollars_thousands_per_capita_log","personal_income_thousands_of_dollars_per_capita_log"])
+
+    if y_col in ["real_gdp_2017_dollars_thousands_per_capita_log", "personal_income_thousands_of_dollars_per_capita_log"]:
+        # Avoid letting core eceonomic outcomes predict each other
+        exclude_from_lasso.extend(["real_gdp_2017_dollars_thousands_per_capita_log", "personal_income_thousands_of_dollars_per_capita_log"])
+
+    mlu.run_lasso_plus_regression(
+        df=regression_df,
+        y_col=y_col,
+        reg_dc_cols=None,
+        reg_dc_density_cols=reg_dc_density_cols,
+        reg_size_cols=None,
+        reg_sector_cols=reg_sector_cols,
+        reg_pop_col=reg_pop_col,
+        reg_econ_cols=reg_econ_cols,
+        reg_env_cols=reg_env_cols,
+        reg_permit_cols=reg_permit_cols,
+        exclude_from_lasso=exclude_from_lasso,
+        dc_lag=2,
+        county_fe=True,
+        year_fe=True,
+        include_information=False
+    )
 ```
-
-#### Analysis
-
-The business sectors were analyzed in this order (all log1p-transformed):
-
-1. industrial
-2. information (includes datacenters)
-3. professional
-4. public services
-5. primary industries
-6. transport
-
-Findings (numbered by sector):
-* R2 = -0.838 [1], 0.816 [2], 0.897 [3], 0.924 [4], 0.641 [5], 0.813 [6]
-* 2 year lagged data centers had p-value of:
-    0.000 [1], 0.022 [2], 0.026 [3], 0.006 [4], 0.022 [5], 0.017 [6]
-    and a coefficient of:
-    -0.00004554 [1], 0.00004831 [2], 0.00006324 [3], -0.00006887 [4], -0.00001851 [5], -0.00003386 [6]
-    * This can be interpreted as one new datacenter being correlated with a 100x coefficient % increase in that sector's employment (ex: 0.0046% increase for industrial)
-    * If p-value is greater than 0.05, there is no significant correlation
-* 2 year lagged *spatial* data centers had a p-value of:
-    0.030 [1], 0.479 [2], 0.132 [3], 0.010 [4], 0.091 [5] 
-    and a coefficient of:
-    -0.00004997 [1], NA [2], NA [3], -0.00009138 [4], NA [5], NA [6]
-    * This can be interpreted as inverse-distance weighted average of the 5 nearest counties’ data centers being correlated with a 100x coefficient % increase in the inverse-distance weighted average of that sector's employment (ex: 0.0050% increase for industrial)
-    * If p-value is greater than 0.05, there is no significant correlation
-* The residuals graph has a wedge shape around 0, but otherwise fairly regularly distributed residuals for all graphs
-* The Q-Q plot has somewhat high variance on both sides for all graphs
-* All VIFs are well below 5 for all models

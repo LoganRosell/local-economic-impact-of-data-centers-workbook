@@ -19,6 +19,8 @@ Thumbs.db
 
 # Markdown file stuff
 *_files/
+*.html
+*.pdf
 
 # Specific folders
 shared_data/

@@ -12,6 +12,7 @@ from sklearn.linear_model import LassoCV
 import statsmodels.formula.api as smf
 from scipy.stats import probplot
 import statsmodels.api as sm 
+import linearmodels as lm
 
 # slice df to specific year
 def return_specific_year(df, year):
@@ -332,12 +333,25 @@ def apply_suggested_transforms(df, eda_df, cols_to_exclude = None):
 
     return df
 
-def run_lasso(df, y_col, exclude_cols = None):
+def _pick_best_from_group(lasso_coef_df, candidates):
+    temp = lasso_coef_df[lasso_coef_df["feature"].isin(candidates)].copy()
+    if temp.empty:
+        return []
+    else:
+        return [temp.sort_values("abs_coef", ascending=False)["feature"].iloc[0]]
+
+def run_lasso(df, y_col, exclude_cols = None, verbose = True):
     """
-    Runs lasso in report mode on a dataframe against a specified response variable,
+    Runs lasso in a dataframe against a specified response variable,
     which helps narrow down variables that may be predictive of that response variable.
     Variables with a higher coefficient should be included,
     whereas variables at or near zero should be considered for exclusion from the final model.
+
+    Parameters:
+        - df: input dataframe
+        - y_col: the response variable to run lasso against
+        - exclude_cols: columns to explicitly exclude from lasso
+        - verbose: whether results should be printed to console or not
     """
     target_col = y_col
 
@@ -349,7 +363,7 @@ def run_lasso(df, y_col, exclude_cols = None):
     lasso_df = df.dropna().copy()
     lasso_df.columns = lasso_df.columns.map(str)
 
-    x_cols = [str(c) for c in lasso_df.columns if str(c) not in drop_cols]
+    x_cols = [c for c in lasso_df.columns if c not in drop_cols]
     
     X = lasso_df[x_cols]
     y = lasso_df[target_col]
@@ -365,9 +379,185 @@ def run_lasso(df, y_col, exclude_cols = None):
     coef_df = pd.DataFrame({
         "feature": x_cols,
         "coef": lasso_model.coef_
-    }).sort_values("coef", key = lambda s: s.abs(), ascending = False)
+    })
 
-    print(coef_df.to_string(index=False))
+    coef_df["abs_coef"] = coef_df["coef"].abs()
+    coef_df = coef_df.sort_values("abs_coef", ascending = False).reset_index(drop=True)
+
+    if verbose:
+        print(coef_df.to_string(index=False))
+
+    coef_df = coef_df[coef_df["coef"] != 0].reset_index(drop = True)
+
+    return coef_df
+
+def select_grouped_features(
+    lasso_coef_df,
+    reg_dc_cols,
+    reg_dc_density_cols,
+    reg_size_cols,
+    reg_sector_cols,
+    reg_pop_col,
+    reg_econ_cols,
+    reg_env_cols,
+    reg_permit_cols,
+    include_information=False):      
+    """
+    Apply pre-defined grouping rules to lasso output
+    """
+    selected = set(lasso_coef_df["feature"].tolist())
+
+    final_x = []
+
+    # data center logic
+    if not reg_dc_cols:
+        final_x.extend([c for c in reg_dc_density_cols])
+    else:
+        has_dc_count = any(c in selected for c in reg_dc_cols)
+        has_dc_density = any(c in selected for c in reg_dc_density_cols)
+        has_size_col = any(c in selected for c in reg_size_cols)
+
+        use_density = not (has_dc_count or has_size_col) and has_dc_density
+
+        if use_density:
+            final_x.extend([c for c in reg_dc_density_cols])
+        else:
+            final_x.extend([c for c in reg_dc_cols])
+            final_x.extend(_pick_best_from_group(lasso_coef_df, reg_size_cols))
+
+    # Population only if selected
+    final_x.extend([c for c in reg_pop_col if c in selected])
+
+    # Econ: any number
+    final_x.extend([c for c in reg_econ_cols if c in selected])
+
+    # Environmental: only one
+    final_x.extend(_pick_best_from_group(lasso_coef_df, reg_env_cols))
+
+    # Permits: only one
+    final_x.extend(_pick_best_from_group(lasso_coef_df, reg_permit_cols))
+
+    # Sectors: only if selected, but exclude information unless explicitly allowed
+    sector_keep = reg_sector_cols.copy()
+    if not include_information:
+        sector_keep = [c for c in sector_keep if "information" not in c]
+
+    final_x.extend([c for c in sector_keep if c in selected])
+
+    final_x = list(dict.fromkeys(final_x))
+    return final_x
+
+def plot_regression_coeffs(model, y_col, reg_df, upper_p = 0.90, lower_p = 0.10):
+    ci = model.conf_int()
+    ci.columns = ["ci_low", "ci_high"]
+
+    round_lower_p = int(lower_p * 100)
+    round_upper_p = int(upper_p * 100)
+
+    plot_df = pd.DataFrame({
+        "term": model.params.index,
+        "coef": model.params.values,
+        "pvalue": model.pvalues.values,
+        "ci_low": ci["ci_low"].values,
+        "ci_high": ci["ci_high"].values
+    })
+
+    plot_df = plot_df[(plot_df["term"] != "Intercept") & (~plot_df["term"].str.startswith("C("))].copy()
+
+    plot_df[f"p{round_lower_p}"] = plot_df["term"].apply(lambda t: reg_df[t].quantile(lower_p))
+    plot_df[f"p{round_upper_p}"] = plot_df["term"].apply(lambda t: reg_df[t].quantile(upper_p))
+    plot_df["x_shift"] = plot_df[f"p{round_upper_p}"] - plot_df[f"p{round_lower_p}"]
+
+    plot_df["effect"] = plot_df["coef"] * plot_df["x_shift"]
+    plot_df["effect_low"] = plot_df["ci_low"] * plot_df["x_shift"]
+    plot_df["effect_high"] = plot_df["ci_high"] * plot_df["x_shift"]
+
+    plot_df["abs_effect"] = plot_df["effect"].abs()
+    plot_df = plot_df.sort_values("abs_effect", ascending=False).sort_values("effect").reset_index(drop=True)
+
+    plot_df["is_datacenter"] = plot_df["term"].str.contains("datacenter", case=False, na=False)
+
+    plt.figure(figsize=(11, max(5, 0.55 * len(plot_df) + 1.5)))
+
+    colors = np.where(
+    (plot_df["effect_low"] <= 0) & (plot_df["effect_high"] >= 0),
+    "#A0A830",  # blue if not significant
+    np.where(plot_df["coef"] >= 0, "#006494", "#a12c7b")
+)
+    fontweights = np.where(plot_df["is_datacenter"], "bold", "normal")
+
+    x_view_min = -0.2
+    x_view_max = 0.2
+
+    plot_df["plot_low"] = plot_df["effect_low"].clip(lower=x_view_min)
+    plot_df["plot_high"] = plot_df["effect_high"].clip(upper=x_view_max)
+
+    plt.hlines(
+        y=plot_df["term"], 
+        xmin = plot_df["plot_low"], 
+        xmax = plot_df["plot_high"], 
+        color = "#797562", 
+        linewidth = 2)
+    
+    plt.scatter(
+        plot_df["effect"].clip(lower=x_view_min, upper=x_view_max), 
+        plot_df["term"], 
+        c=colors,
+        zorder = 3)
+
+    plt.xlim(x_view_min, x_view_max)
+
+    plt.axvline(0, color =  "#28251d", linestyle = "--", linewidth = 1)
+    plt.xlabel(f"Predicted change in {y_col} from P{round_lower_p} to P{round_upper_p} of predictor")
+    plt.ylabel("")
+    plt.title(f"Regression effects for {y_col}")
+
+    ax = plt.gca()
+
+    for tick_label in ax.get_yticklabels():
+        if "datacenter" in tick_label.get_text():
+            tick_label.set_fontweight("bold")
+
+    x_min = plot_df["effect_low"].min()
+    x_max = plot_df["effect_high"].max()
+    x_pad = (x_max - x_min) * 0.02 if x_max > x_min else 0.1
+
+    for _, row in plot_df[plot_df["is_datacenter"]].iterrows():
+        label_x = row["effect_high"] + x_pad
+        label_txt = f"P{round_lower_p}={row[f'p{round_lower_p}']:.2f}, P{round_upper_p}={row[f'p{round_upper_p}']:.2f}"
+        ax.text(
+            label_x,
+            row["term"],
+            label_txt,
+            va="center",
+            ha="left",
+            fontsize=9,
+            fontweight="bold",
+            color="#28251d"
+        )
+
+    for _, row in plot_df.iterrows():
+        if row["effect_low"] < x_view_min:
+            plt.scatter(x_view_min, row["term"], marker="<", color="#797562", s=35, zorder=4)
+        if row["effect_high"] > x_view_max:
+            plt.scatter(x_view_max, row["term"], marker=">", color="#797562", s=35, zorder=4)
+
+    for _, row in plot_df[plot_df["is_datacenter"]].iterrows():
+        x_text = np.clip(row["effect"], x_view_min, x_view_max)
+        ax.annotate(
+            f"{row['effect']:.4f}",
+            xy=(x_text, row["term"]),
+            xytext=(0, 4),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            fontweight="bold",
+            color="#28251d"
+        )
+
+    plt.tight_layout()
+    plt.show()
 
 def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     """
@@ -387,35 +577,46 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
         - Always clusters by county
     """
 
-    needed_cols = [y_col] + x_cols
-    if county_fe:
-        needed_cols.append("county_id")
-    if year_fe:
-        needed_cols.append("year")
+    reg_df = df.dropna(subset=[y_col] + x_cols).copy()
 
-    needed_cols = list(dict.fromkeys(needed_cols))
-    reg_df = df[needed_cols].dropna().copy()
+    reg_df_panel  = reg_df.set_index(["county_id", "year"])
 
-    rhs_terms = x_cols.copy()
-    if county_fe:
-        rhs_terms.append("C(county_id)")
-    if year_fe:
-        rhs_terms.append("C(year)")
+    y = reg_df_panel[y_col]
+    X = reg_df_panel[x_cols]
 
-    formula = f"{y_col} ~ " + " + ".join(rhs_terms)
+    entity_effects = county_fe
+    time_effects = year_fe
 
-    model = smf.ols(formula=formula, data=reg_df).fit(
-            cov_type="cluster",
-            cov_kwds={"groups": reg_df["county_id"]}
-        )
+    model = lm.PanelOLS(
+        y,
+        X,
+        entity_effects = entity_effects,
+        time_effects = time_effects
+    ).fit(cov_type = "clustered", cluster_entity=True)
 
-    fitted = model.fittedvalues
-    resid = model.resid
+    fitted = model.fitted_values
+    resid = model.resids
 
-    print("Formula:")
-    print(formula)
-    print("\n")
-    print(model.summary())
+    ci = model.conf_int()
+    ci.columns = ["ci_low", "ci_high"]
+
+    summary_df = pd.DataFrame({
+        "term": model.params.index,
+        "coef": model.params.values,
+        "pvalue": model.pvalues.values,
+        "ci_low": ci["ci_low"].values,
+        "ci_high": ci["ci_high"].values
+    })
+
+    summary_df["pvalue"] = summary_df["pvalue"].apply(lambda x: f"{x:.6f}" if x >= 0.000001 else "<0.000001")
+    summary_df["coef"] = summary_df["coef"].round(6)
+    summary_df["ci_low"] = summary_df["ci_low"].round(6)
+    summary_df["ci_high"] = summary_df["ci_high"].round(6)
+
+    print("\nModel:")
+    print(model.summary)
+
+    plot_regression_coeffs(model, y_col, reg_df)
 
     # Examine Residuals
     plt.figure(figsize=(7, 5))
@@ -446,7 +647,130 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
 
     print(vif_df)
 
-    return model
+    return {
+        "model": model,
+        "reg_df": reg_df
+    }
+
+def print_regression_analysis(result, y_col, reg_dc_cols, reg_dc_density_cols_lag):
+    all_dc_cols = reg_dc_cols + reg_dc_density_cols_lag
+
+    model = result["model"]
+
+    rows = []
+    for var in all_dc_cols:
+        if var in model.params.index:
+            rows.append({
+                "variable": var,
+                "coef": model.params[var],
+                "pvalue": model.pvalues[var]
+            })
+
+    dc_table = pd.DataFrame(rows)
+
+    print("\n" + "-" * 100)
+    print(f"RESULTS FOR REGRESSION ON: {y_col}")
+    print(f"R2 (Within): {model.rsquared_within:.4f}")
+    print(f"R2 (Overall): {model.rsquared:.4f}")
+    print("\nData center coefficients:")
+    print(dc_table.to_string(index=False))
+
+def run_lasso_plus_regression(
+    df,
+    y_col,
+    reg_dc_cols,
+    reg_dc_density_cols,
+    reg_size_cols,
+    reg_sector_cols,
+    reg_pop_col,
+    reg_econ_cols,
+    reg_env_cols,
+    reg_permit_cols,
+    exclude_from_lasso=None,
+    dc_lag=2,
+    county_fe=True,
+    year_fe=True,
+    include_information=False):
+    """
+    Wrapper function for linear regression:
+    1. runs lasso
+    2. applies grouping rules
+    3. adds lagged datacenter terms
+    4. runs linear regression
+    5. prints analysis
+    """
+
+    if exclude_from_lasso is None:
+        exclude_from_lasso = []
+
+    if reg_dc_cols is None:
+        reg_dc_cols = []
+
+    if reg_size_cols is None:
+        reg_size_cols = []
+
+    if dc_lag is not None:
+        all_dc_cols = reg_dc_cols + reg_dc_density_cols
+
+        reg_dc_cols = []
+        reg_dc_density_cols = []
+
+        for col in all_dc_cols:
+            lag_col = f"{col}_lag{dc_lag}"
+            if "per" in col:
+                reg_dc_density_cols.append(lag_col)
+            else:
+                reg_dc_cols.append(lag_col)
+
+        all_dc_cols = reg_dc_cols + reg_dc_density_cols
+
+    df = df[[c for c in df.columns if "datacenter" not in c or c in all_dc_cols]]
+
+    lasso_coef_df = run_lasso(
+        df=df,
+        y_col=y_col,
+        exclude_cols=exclude_from_lasso, 
+        verbose = True
+    )
+
+    dc_lasso_dfs = []
+    for dc_col in all_dc_cols:
+        dc_exclude = exclude_from_lasso + [y_col, dc_col]
+        dc_lasso_df = run_lasso(
+            df=df,
+            y_col=dc_col,
+            exclude_cols=dc_exclude,
+            verbose = False
+        )
+        dc_lasso_dfs.append(dc_lasso_df)
+
+    if dc_lasso_dfs:
+        combined_lasso_df = pd.concat([lasso_coef_df] + dc_lasso_dfs)
+        combined_lasso_df = combined_lasso_df.drop_duplicates(subset="feature").reset_index(drop=True)
+        lasso_coef_df = combined_lasso_df
+
+    selected_x = select_grouped_features(
+        lasso_coef_df=lasso_coef_df,
+        reg_dc_cols=reg_dc_cols,
+        reg_dc_density_cols=reg_dc_density_cols,
+        reg_size_cols=reg_size_cols,
+        reg_sector_cols=reg_sector_cols,
+        reg_pop_col=reg_pop_col,
+        reg_econ_cols=reg_econ_cols,
+        reg_env_cols=reg_env_cols,
+        reg_permit_cols=reg_permit_cols,
+        include_information=include_information
+    )
+
+    result = run_linear_regression(
+        df=df,
+        y_col=y_col,
+        x_cols=selected_x,
+        county_fe=county_fe,
+        year_fe=year_fe,
+    )
+
+    print_regression_analysis(result, y_col, reg_dc_cols, reg_dc_density_cols)
 
 def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
     df = df.copy()
@@ -476,11 +800,11 @@ def combine_dfs(base_df, dfs_to_join):
             raise ValueError(f"No `county_id` column found in dfs_to_join[{i}]")
 
         # Make sure all tables only have one row per county
-        dupes = df["county_id"][df["county_id"].duplicated()].unique()
+        dupes = df["county_id"][df[["county_id","year"]].duplicated()].unique()
         if len(dupes) > 0:
-            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id`. Problematic Counties: {list(dupes)}")
+            raise ValueError(f"dfs_to_join[{i}] is not unique on `county_id and year`. Problematic Counties: {list(dupes)}")
 
-        out_df = pd.merge(out_df, df, how = "left", on = "county_id", validate = "one_to_one")
+        out_df = pd.merge(out_df, df, how = "left", on = ["county_id", "year"], validate = "one_to_one")
 
     missing_summary_table = (
         out_df.isna()
