@@ -295,7 +295,7 @@ for y_col in outcomes:
     print(f"RUNNING REGRESSION ON: {y_col}")
     print("=" * 100)
 
-    exclude_from_lasso = ["year_num"]
+    exclude_from_lasso = ["year_num"] + reg_dc_cols + reg_size_cols
     
     if y_col in reg_env_cols:
         exclude_from_lasso.extend(reg_env_cols)
