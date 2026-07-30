@@ -526,6 +526,29 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
         "formula": formula
     }
 
+def print_regression_analysis(result, y_col, reg_dc_cols, reg_dc_density_cols_lag):
+    all_dc_cols = reg_dc_cols + reg_dc_density_cols_lag
+
+    model = result["model"]
+
+    rows = []
+    for var in all_dc_cols:
+        if var in model.params.index:
+            rows.append({
+                "variable": var,
+                "coef": model.params[var],
+                "pvalue": model.pvalues[var]
+            })
+
+    dc_table = pd.DataFrame(rows)
+
+    print("\n" + "-" * 100)
+    print(f"RESULTS FOR REGRESSION ON: {y_col}")
+    print(f"R2: {model.rsquared:.4f}")
+    print(f"Adj. R2: {model.rsquared_adj:.4f}")
+    print("\nData center coefficients:")
+    print(dc_table.to_string(index=False))
+
 def run_lasso_plus_regression(
     df,
     y_col,
@@ -603,6 +626,9 @@ def run_lasso_plus_regression(
         county_fe=county_fe,
         year_fe=year_fe,
     )
+
+    print_regression_analysis(result, y_col, reg_dc_cols, reg_dc_density_cols)
+
 def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
     df = df.copy()
     df = df.sort_values([group_col, time_col])
