@@ -122,6 +122,9 @@ final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_a
 final_df = final_df.rename(columns = {
     "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
     "estabs": "datacenters",
+    "estabs_per_100_sqmi": "datacenters_per_100_sqmi",
+    "nearby_estabs_50mi_landadj": "nearby_datacenters_50mi",
+    "nearby_estabs_50mi_per_100_sqmi": "nearby_datacenters_50mi_per_100_sqmi",
     "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
     "unemployment_rate": "unemployment_rate_pct"
     })
