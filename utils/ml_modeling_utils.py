@@ -443,6 +443,119 @@ def select_grouped_features(
 
     final_x = list(dict.fromkeys(final_x))
     return final_x
+
+def plot_regression_coeffs(model, y_col, reg_df, upper_p = 0.90, lower_p = 0.10):
+    ci = model.conf_int()
+    ci.columns = ["ci_low", "ci_high"]
+
+    round_lower_p = int(lower_p * 100)
+    round_upper_p = int(upper_p * 100)
+
+    plot_df = pd.DataFrame({
+        "term": model.params.index,
+        "coef": model.params.values,
+        "pvalue": model.pvalues.values,
+        "ci_low": ci["ci_low"].values,
+        "ci_high": ci["ci_high"].values
+    })
+
+    plot_df = plot_df[(plot_df["term"] != "Intercept") & (~plot_df["term"].str.startswith("C("))].copy()
+
+    plot_df[f"p{round_lower_p}"] = plot_df["term"].apply(lambda t: reg_df[t].quantile(lower_p))
+    plot_df[f"p{round_upper_p}"] = plot_df["term"].apply(lambda t: reg_df[t].quantile(upper_p))
+    plot_df["x_shift"] = plot_df[f"p{round_upper_p}"] - plot_df[f"p{round_lower_p}"]
+
+    plot_df["effect"] = plot_df["coef"] * plot_df["x_shift"]
+    plot_df["effect_low"] = plot_df["ci_low"] * plot_df["x_shift"]
+    plot_df["effect_high"] = plot_df["ci_high"] * plot_df["x_shift"]
+
+    plot_df["abs_effect"] = plot_df["effect"].abs()
+    plot_df = plot_df.sort_values("abs_effect", ascending=False).sort_values("effect").reset_index(drop=True)
+
+    plot_df["is_datacenter"] = plot_df["term"].str.contains("datacenter", case=False, na=False)
+
+    plt.figure(figsize=(11, max(5, 0.55 * len(plot_df) + 1.5)))
+
+    colors = np.where(
+    (plot_df["effect_low"] <= 0) & (plot_df["effect_high"] >= 0),
+    "#A0A830",  # blue if not significant
+    np.where(plot_df["coef"] >= 0, "#006494", "#a12c7b")
+)
+    fontweights = np.where(plot_df["is_datacenter"], "bold", "normal")
+
+    x_view_min = -0.4
+    x_view_max = 0.4
+
+    plot_df["plot_low"] = plot_df["effect_low"].clip(lower=x_view_min)
+    plot_df["plot_high"] = plot_df["effect_high"].clip(upper=x_view_max)
+
+    plt.hlines(
+        y=plot_df["term"], 
+        xmin = plot_df["plot_low"], 
+        xmax = plot_df["plot_high"], 
+        color = "#797562", 
+        linewidth = 2)
+    
+    plt.scatter(
+        plot_df["effect"].clip(lower=x_view_min, upper=x_view_max), 
+        plot_df["term"], 
+        c=colors,
+        zorder = 3)
+
+    plt.xlim(x_view_min, x_view_max)
+
+    plt.axvline(0, color =  "#28251d", linestyle = "--", linewidth = 1)
+    plt.xlabel(f"Predicted change in {y_col} from P{round_lower_p} to P{round_upper_p} of predictor")
+    plt.ylabel("")
+    plt.title(f"Regression effects for {y_col}")
+
+    ax = plt.gca()
+
+    for tick_label in ax.get_yticklabels():
+        if "datacenter" in tick_label.get_text():
+            tick_label.set_fontweight("bold")
+
+    x_min = plot_df["effect_low"].min()
+    x_max = plot_df["effect_high"].max()
+    x_pad = (x_max - x_min) * 0.02 if x_max > x_min else 0.1
+
+    for _, row in plot_df[plot_df["is_datacenter"]].iterrows():
+        label_x = row["effect_high"] + x_pad
+        label_txt = f"P{round_lower_p}={row[f'p{round_lower_p}']:.2f}, P{round_upper_p}={row[f'p{round_upper_p}']:.2f}"
+        ax.text(
+            label_x,
+            row["term"],
+            label_txt,
+            va="center",
+            ha="left",
+            fontsize=9,
+            fontweight="bold",
+            color="#28251d"
+        )
+
+    for _, row in plot_df.iterrows():
+        if row["effect_low"] < x_view_min:
+            plt.scatter(x_view_min, row["term"], marker="<", color="#797562", s=35, zorder=4)
+        if row["effect_high"] > x_view_max:
+            plt.scatter(x_view_max, row["term"], marker=">", color="#797562", s=35, zorder=4)
+
+    for _, row in plot_df[plot_df["is_datacenter"]].iterrows():
+        x_text = np.clip(row["effect"], x_view_min, x_view_max)
+        ax.annotate(
+            f"{row['effect']:.4f}",
+            xy=(x_text, row["term"]),
+            xytext=(0, 4),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            fontweight="bold",
+            color="#28251d"
+        )
+
+    plt.tight_layout()
+    plt.show()
+
 def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     """
     Runs a linear regression and prints the regression output,
@@ -509,6 +622,8 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     print("\nModel Summary (Excluding Fixed Effect Rows):")
     print(model.summary().tables[0])
     print(summary_df.to_string(index=False))
+
+    plot_regression_coeffs(model, y_col, reg_df)
 
     # Examine Residuals
     plt.figure(figsize=(7, 5))
