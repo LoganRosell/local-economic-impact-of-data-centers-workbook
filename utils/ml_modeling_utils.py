@@ -339,7 +339,7 @@ def _pick_best_from_group(lasso_coef_df, candidates):
     else:
         return [temp.sort_values("abs_coef", ascending=False)["feature"].iloc[0]]
 
-def run_lasso(df, y_col, exclude_cols = None):
+def run_lasso(df, y_col, exclude_cols = None, verbose = True):
     """
     Runs lasso in a dataframe against a specified response variable,
     which helps narrow down variables that may be predictive of that response variable.
@@ -350,6 +350,7 @@ def run_lasso(df, y_col, exclude_cols = None):
         - df: input dataframe
         - y_col: the response variable to run lasso against
         - exclude_cols: columns to explicitly exclude from lasso
+        - verbose: whether results should be printed to console or not
     """
     target_col = y_col
 
@@ -382,7 +383,8 @@ def run_lasso(df, y_col, exclude_cols = None):
     coef_df["abs_coef"] = coef_df["coef"].abs()
     coef_df = coef_df.sort_values("abs_coef", ascending = False).reset_index(drop=True)
 
-    print(coef_df.to_string(index=False))
+    if verbose:
+        print(coef_df.to_string(index=False))
 
     coef_df = coef_df[coef_df["coef"] != 0].reset_index(drop = True)
 
@@ -737,7 +739,8 @@ def run_lasso_plus_regression(
     lasso_coef_df = run_lasso(
         df=df,
         y_col=y_col,
-        exclude_cols=exclude_from_lasso
+        exclude_cols=exclude_from_lasso, 
+        verbose = True
     )
 
     selected_x = select_grouped_features(
