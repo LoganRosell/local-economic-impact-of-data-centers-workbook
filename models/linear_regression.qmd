@@ -298,13 +298,22 @@ for y_col in outcomes:
     exclude_from_lasso = ["year_num"] + reg_dc_cols + reg_size_cols
     
     if y_col in reg_env_cols:
+        # Don't let neighboring environmental factors predict county environmental factors (and vice versa)
         exclude_from_lasso.extend(reg_env_cols)
 
     if y_col in reg_permit_cols:
+        # Too closely related
         exclude_from_lasso.extend(reg_permit_cols)
 
-    if y_col in reg_pop_col:
+    if y_col in reg_pop_col: 
+        # Don't let residential permits predict population (population is upstream cause)
         exclude_from_lasso.extend(reg_permit_cols)
+        # Don't let per-capita variables predict population (they're already derived from pop)
+        exclude_from_lasso.extend(reg_sector_cols + ["real_gdp_2017_dollars_thousands_per_capita_log","personal_income_thousands_of_dollars_per_capita_log"])
+
+    if y_col in ["real_gdp_2017_dollars_thousands_per_capita_log", "personal_income_thousands_of_dollars_per_capita_log"]:
+        # Avoid letting core eceonomic outcomes predict each other
+        exclude_from_lasso.extend(["real_gdp_2017_dollars_thousands_per_capita_log", "personal_income_thousands_of_dollars_per_capita_log"])
 
     mlu.run_lasso_plus_regression(
         df=regression_df,
