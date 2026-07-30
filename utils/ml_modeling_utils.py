@@ -486,8 +486,8 @@ def plot_regression_coeffs(model, y_col, reg_df, upper_p = 0.90, lower_p = 0.10)
 )
     fontweights = np.where(plot_df["is_datacenter"], "bold", "normal")
 
-    x_view_min = -0.4
-    x_view_max = 0.4
+    x_view_min = -0.2
+    x_view_max = 0.2
 
     plot_df["plot_low"] = plot_df["effect_low"].clip(lower=x_view_min)
     plot_df["plot_high"] = plot_df["effect_high"].clip(upper=x_view_max)
