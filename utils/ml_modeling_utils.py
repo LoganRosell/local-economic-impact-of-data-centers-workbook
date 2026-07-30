@@ -520,7 +520,11 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
 
     print(vif_df)
 
-    return model
+    return {
+        "model": model,
+        "reg_df": reg_df,
+        "formula": formula
+    }
 
 def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
     df = df.copy()
