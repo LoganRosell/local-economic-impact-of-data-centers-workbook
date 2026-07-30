@@ -526,6 +526,83 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
         "formula": formula
     }
 
+def run_lasso_plus_regression(
+    df,
+    y_col,
+    reg_dc_cols,
+    reg_dc_density_cols,
+    reg_size_cols,
+    reg_sector_cols,
+    reg_pop_col,
+    reg_econ_cols,
+    reg_env_cols,
+    reg_permit_cols,
+    exclude_from_lasso=None,
+    dc_lag=2,
+    county_fe=True,
+    year_fe=True,
+    include_information=False):
+    """
+    Wrapper function for linear regression:
+    1. runs lasso
+    2. applies grouping rules
+    3. adds lagged datacenter terms
+    4. runs linear regression
+    5. prints analysis
+    """
+
+    if exclude_from_lasso is None:
+        exclude_from_lasso = []
+
+    if reg_dc_cols is None:
+        reg_dc_cols = []
+
+    if reg_size_cols is None:
+        reg_size_cols = []
+
+    if dc_lag is not None:
+        all_dc_cols = reg_dc_cols + reg_dc_density_cols
+
+        reg_dc_cols = []
+        reg_dc_density_cols = []
+
+        for col in all_dc_cols:
+            lag_col = f"{col}_lag{dc_lag}"
+            if "per" in col:
+                reg_dc_density_cols.append(lag_col)
+            else:
+                reg_dc_cols.append(lag_col)
+
+        all_dc_cols = reg_dc_cols + reg_dc_density_cols
+
+    df = df[[c for c in df.columns if "datacenter" not in c or c in all_dc_cols]]
+
+    lasso_coef_df = run_lasso(
+        df=df,
+        y_col=y_col,
+        exclude_cols=exclude_from_lasso
+    )
+
+    selected_x = select_grouped_features(
+        lasso_coef_df=lasso_coef_df,
+        reg_dc_cols=reg_dc_cols,
+        reg_dc_density_cols=reg_dc_density_cols,
+        reg_size_cols=reg_size_cols,
+        reg_sector_cols=reg_sector_cols,
+        reg_pop_col=reg_pop_col,
+        reg_econ_cols=reg_econ_cols,
+        reg_env_cols=reg_env_cols,
+        reg_permit_cols=reg_permit_cols,
+        include_information=include_information
+    )
+
+    result = run_linear_regression(
+        df=df,
+        y_col=y_col,
+        x_cols=selected_x,
+        county_fe=county_fe,
+        year_fe=year_fe,
+    )
 def add_lags(df, col, lags=(1, 2, 3), group_col="county_id", time_col="year"):
     df = df.copy()
     df = df.sort_values([group_col, time_col])
