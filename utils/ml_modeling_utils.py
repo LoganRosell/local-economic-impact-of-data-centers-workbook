@@ -486,10 +486,29 @@ def run_linear_regression(df, y_col, x_cols, county_fe = True, year_fe = True):
     fitted = model.fittedvalues
     resid = model.resid
 
+    ci = model.conf_int()
+    ci.columns = ["ci_low", "ci_high"]
+
+    summary_df = pd.DataFrame({
+        "term": model.params.index,
+        "coef": model.params.values,
+        "pvalue": model.pvalues.values,
+        "ci_low": ci["ci_low"].values,
+        "ci_high": ci["ci_high"].values
+    })
+
+    summary_df = summary_df[~summary_df["term"].str.startswith("C(")].copy()
+
+    summary_df["pvalue"] = summary_df["pvalue"].apply(lambda x: f"{x:.6f}" if x >= 0.000001 else "<0.000001")
+    summary_df["coef"] = summary_df["coef"].round(6)
+    summary_df["ci_low"] = summary_df["ci_low"].round(6)
+    summary_df["ci_high"] = summary_df["ci_high"].round(6)
+
     print("Formula:")
     print(formula)
-    print("\n")
-    print(model.summary())
+    print("\nModel Summary (Excluding Fixed Effect Rows):")
+    print(model.summary().tables[0])
+    print(summary_df.to_string(index=False))
 
     # Examine Residuals
     plt.figure(figsize=(7, 5))
