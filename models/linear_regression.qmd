@@ -38,6 +38,7 @@ con.execute("INSTALL postgres; LOAD postgres;")
 con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
 
 dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+near_dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
 air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
 bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
 code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
@@ -79,7 +80,11 @@ county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_ye
 ```
 
 ```{python}
-final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df])
+near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landadj"].round()
+```
+
+```{python}
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
 ```
 
 ### Clean up final table
@@ -145,9 +150,9 @@ regression_cols = [
 
     # treatment
     "datacenters",
-    "datacenters_spatial_weighted_avg_5",
-    "datacenters_per_capita",
-    "datacenters_spatial_per_capita",
+    "datacenters_per_100_sqmi",
+    "nearby_datacenters_50mi",
+    "nearby_datacenters_50mi_per_100_sqmi",
 
     # core controls
     "population",
@@ -179,13 +184,17 @@ summary_df
 ```
 
 ```{python}
-regression_df = mlu.apply_suggested_transforms(regression_df, summary_df, cols_to_exclude = ["datacenters", "datacenters_spatial_weighted_avg_5"])
+all_dc_cols = ["datacenters", "nearby_datacenters_50mi", "datacenters_per_100_sqmi", "nearby_datacenters_50mi_per_100_sqmi"]
+```
+
+```{python}
+regression_df = mlu.apply_suggested_transforms(regression_df, summary_df, cols_to_exclude = all_dc_cols)
 regression_df
 ```
 
 ```{python}
-regression_df = mlu.add_lags(regression_df, "datacenters", lags=(1, 2, 3))
-regression_df = mlu.add_lags(regression_df, "datacenters_spatial_weighted_avg_5", lags=(1, 2, 3))
+for col in all_dc_cols:
+    regression_df = mlu.add_lags(regression_df, col, lags=(1, 2, 3))
 ```
 
 ```{python}
