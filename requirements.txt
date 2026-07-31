@@ -5,6 +5,7 @@ numpy
 sqlalchemy
 duckdb
 haversine
+geopandas
 
 # Modeling, Machine Learning & Statistics
 scikit-learn
