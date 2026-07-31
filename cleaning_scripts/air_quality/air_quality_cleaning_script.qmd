@@ -27,10 +27,11 @@ csv_path = data_dir / "air" / "Daily_County-Level_PM2.5_Concentrations_2001-2022
 ```{python}
 # setup connection variables to local sql db
 database_url = os.getenv("DATABASE_URL")
+duckdb_url = os.getenv("DUCKDB_DB_URL")
 engine = create_engine(database_url)
 # Initialize DuckDB connection
 con = duckdb.connect()
-con.execute(f"ATTACH OR REPLACE '{database_url}' AS my_db (TYPE POSTGRES);")
+con.execute(f"ATTACH OR REPLACE '{duckdb_url}' AS my_db (TYPE POSTGRES);")
 ```
 
 ```{python}
