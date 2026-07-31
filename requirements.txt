@@ -12,6 +12,7 @@ scikit-learn
 scipy
 statsmodels
 imbalanced-learn
+linearmodels
 
 # Visualization & EDA
 matplotlib
