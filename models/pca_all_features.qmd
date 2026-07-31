@@ -1,0 +1,355 @@
+```{python}
+import importlib
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+import duckdb
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_numeric_dtype
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, silhouette_score
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
+from sqlalchemy import create_engine
+import umap
+from imblearn.over_sampling import SMOTE
+
+import utils.db_cleaning_utils as dbu
+import utils.ml_modeling_utils as mlu
+
+# Reload custom utilities
+importlib.reload(dbu)
+importlib.reload(mlu)
+
+# Load environment & paths
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+### Loading and merging the data
+
+```{python}
+# Load data
+database_url = os.getenv("DUCKDB_DB_URL")
+
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
+
+dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+near_dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
+air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
+bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
+code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
+gdp_df = con.execute("SELECT * FROM my_db.transformed.gdp").df()
+inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
+pop_df = con.execute("SELECT * FROM my_db.population").df()
+perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
+emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
+county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
+```
+
+## Create Table for Regressions
+
+### Create final table
+
+```{python}
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
+
+final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+
+final_bus_df = (
+    final_bus_df
+    .groupby("county_id", group_keys=False)
+    .apply(dbu.impute_all_columns_for_county)
+)
+
+final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
+```
+
+```{python}
+# Create county_year dataframe for merging below
+county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_year_df["water_area_sqmi"]
+```
+
+```{python}
+near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landadj"].round()
+```
+
+```{python}
+# remove land and water areas from air_df to avoid col name conflict in merge step below
+air_df = air_df.drop(columns=["land_area_sqmi", "water_area_sqmi"])
+
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
+```
+
+### Clean up final table
+
+```{python}
+# Make applicable columns per-capita
+bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
+
+cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
+
+per_capita_cols = [
+    "real_gdp_2017_dollars_thousands",
+    "real_gdp_2017_dollars_thousands_spatial_weighted_avg_5",
+    "personal_income_thousands_of_dollars",
+    "personal_income_thousands_of_dollars_spatial_weighted_avg_5",
+    "all_permits",
+    "all_permits_spatial_weighted_avg_5",
+    "single_family_permits",
+    "single_family_permits_spatial_weighted_avg_5",
+    "all_multifamily_permits",
+    "all_multifamily_permits_spatial_weighted_avg_5"
+] + cols
+
+final_df = mlu.make_per_capita(final_df, per_capita_cols)
+
+final_df["single_family_permits_per_1000"] = (
+    final_df["single_family_permits_per_capita"] * 1000
+)
+
+final_df["all_multifamily_permits_per_1000"] = (
+    final_df["all_multifamily_permits_per_capita"] * 1000
+)
+```
+
+```{python}
+# Per-capita data centers (don't drop original though)
+final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
+final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
+```
+
+```{python}
+# Rename for clarity
+final_df = final_df.rename(columns = {
+    "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
+    "estabs": "datacenters",
+    "estabs_per_100_sqmi": "datacenters_per_100_sqmi",
+    "nearby_estabs_50mi_landadj": "nearby_datacenters_50mi",
+    "nearby_estabs_50mi_per_100_sqmi": "nearby_datacenters_50mi_per_100_sqmi",
+    "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
+    "unemployment_rate": "unemployment_rate_pct"
+    })
+```
+
+```{python}
+summary_df = mlu.eda_summary(final_df, acceptable_skew = 2.0)
+summary_df
+```
+
+```{python}
+all_dc_cols = ["datacenters", "nearby_datacenters_50mi", "datacenters_per_100_sqmi", "nearby_datacenters_50mi_per_100_sqmi"]
+```
+
+```{python}
+final_df = mlu.apply_suggested_transforms(final_df, summary_df, cols_to_exclude = all_dc_cols)
+final_df
+```
+
+```{python}
+# Add column to county_df which indicates the presence of one or more data centers in a county
+final_df["has_datacenter"] = final_df["datacenters"] > 0
+```
+
+```{python}
+# drop non-numeric columns which are not helpful ids
+final_df = final_df.drop(columns=[
+    "state_fips_code",
+    "county_fips_code",
+    "county_ns_code",
+    "county_name",
+    "fips_class_code",
+    "functional_status",
+    "state"])
+```
+
+```{python}
+# drop features with any missing data
+cols_with_high_missingness =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["missing_share"] > 0].loc[:,"column"]
+
+cols_with_high_missingness = cols_with_high_missingness.to_list()
+
+final_df = final_df.drop(columns=cols_with_high_missingness)
+```
+
+```{python}
+# drop features with high skew
+skewed_cols =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["skew"] > 2].loc[:,"column"]
+
+skewed_cols = skewed_cols.to_list()
+
+final_df = final_df.drop(columns=skewed_cols)
+```
+
+### PCA
+
+
+```{python}
+# set up trainning and testing data
+cutoff_year = 2018
+train_mask = final_df['year'] <= cutoff_year
+test_mask = final_df['year'] > cutoff_year
+
+drop_cols = ['has_datacenter', 'year', 'county_id'] 
+
+X_train = final_df.loc[train_mask].drop(columns=drop_cols, errors='ignore')
+y_train = final_df.loc[train_mask, 'has_datacenter']
+
+X_test = final_df.loc[test_mask].drop(columns=drop_cols, errors='ignore')
+y_test = final_df.loc[test_mask, 'has_datacenter']
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+smote = SMOTE(sampling_strategy='minority', random_state=57)
+X_train_sm, y_train_sm = smote.fit_resample(X_train_scaled, y_train)
+
+pca = PCA(n_components=2)
+X_train_pca = pca.fit_transform(X_train_sm)
+X_test_pca = pca.transform(X_test_scaled)
+
+model = LogisticRegression()
+model.fit(X_train_pca, y_train_sm)
+
+y_pred = model.predict(X_test_pca)
+```
+
+
+```{python}
+mlu.model_accuracy_report(model, X_train_pca, y_train_sm, X_test_pca, y_test)
+```
+
+```{python}
+
+plt.scatter(
+    X_train_pca[:, 0],
+    X_train_pca[:, 1],
+    c=y_train_sm,
+    cmap='coolwarm',
+    edgecolor='none',
+    s=20,
+    alpha=0.1)
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.title('After PCA: Projected Training Set')
+plt.colorbar(label='Target classes')
+
+plt.tight_layout()
+plt.show()
+```
+
+### UMAP
+
+```{python}
+# un-supervised
+reducer = umap.UMAP(n_components=2, n_neighbors=50, min_dist=0.1, random_state=42)
+X_train_umap = reducer.fit_transform(X_train)
+
+X_test_umap = reducer.transform(X_test)
+
+# plot training data
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_train_umap[:, 0], 
+    X_train_umap[:, 1], 
+    c=y_train, 
+    cmap='coolwarm', 
+    edgecolor='k', 
+    s=80,
+    alpha = 0.3
+)
+plt.xlabel('UMAP Dimension 1')
+plt.ylabel('UMAP Dimension 2')
+plt.title('UMAP Projection of Training Data')
+plt.colorbar(scatter, label='Target classes')
+
+plt.tight_layout()
+plt.show()
+
+# plot testing data
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_test_umap[:, 0], 
+    X_test_umap[:, 1], 
+    c=y_test, 
+    cmap='coolwarm', 
+    edgecolor='k', 
+    s=80,
+    alpha = 0.3
+)
+plt.xlabel('UMAP Dimension 1')
+plt.ylabel('UMAP Dimension 2')
+plt.title('UMAP Projection of Test Data')
+plt.colorbar(scatter, label='Target classes')
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# supervised (has access to y_train data)
+reducer = umap.UMAP(n_components=2, n_neighbors=50, min_dist=0.1, random_state=42)
+X_train_umap = reducer.fit_transform(X_train, y=y_train)
+
+X_test_umap = reducer.transform(X_test)
+
+
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_train_umap[:, 0], 
+    X_train_umap[:, 1], 
+    c=y_train, 
+    cmap='coolwarm', 
+    edgecolor='k', 
+    s=80,
+    alpha = 0.3
+)
+plt.xlabel('UMAP Dimension 1')
+plt.ylabel('UMAP Dimension 2')
+plt.title('UMAP Projection of Training Data')
+plt.colorbar(scatter, label='Target classes')
+
+plt.tight_layout()
+plt.show()
+
+
+
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_test_umap[:, 0], 
+    X_test_umap[:, 1], 
+    c=y_test, 
+    cmap='coolwarm', 
+    edgecolor='k', 
+    s=80,
+    alpha = 0.3
+)
+plt.xlabel('UMAP Dimension 1')
+plt.ylabel('UMAP Dimension 2')
+plt.title('UMAP Projection of Test Data')
+plt.colorbar(scatter, label='Target classes')
+
+plt.tight_layout()
+plt.show()
+```
