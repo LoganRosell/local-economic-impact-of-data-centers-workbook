@@ -18,6 +18,7 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from imblearn.over_sampling import SMOTE
 
 import importlib
 import utils.ml_modeling_utils as mlu
