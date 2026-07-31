@@ -84,6 +84,9 @@ near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landad
 ```
 
 ```{python}
+# remove land and water areas from air_df to avoid col name conflict in merge step below
+air_df = air_df.drop(columns=["land_area_sqmi", "water_area_sqmi"])
+
 final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
 ```
 
