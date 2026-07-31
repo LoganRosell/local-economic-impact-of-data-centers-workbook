@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 import importlib
 import utils.db_cleaning_utils as dbu
 importlib.reload(dbu)
+import duckdb
 
 from utils.db_cleaning_utils import all_county_years, spatial_fill
 
@@ -23,12 +24,25 @@ data_dir = Path(os.environ["DATA_DIR"])
 csv_path = data_dir / "air" / "Daily_County-Level_PM2.5_Concentrations_2001-2022_20260611.csv"
 ```
 
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+# Initialize DuckDB connection
+con = duckdb.connect()
+con.execute(f"ATTACH OR REPLACE '{database_url}' AS my_db (TYPE POSTGRES);")
+```
 
 ```{python}
-df_raw = pd.read_csv(
+df_raw = duckdb.read_csv(
     csv_path,
-    dtype = {"year": int, "statefips": str, "countyfips": str, "pm25_max_pred": str}
-)
+    dtype={
+        "year": "INTEGER",
+        "statefips": "VARCHAR",
+        "countyfips": "VARCHAR",
+        "pm25_max_pred": "VARCHAR",
+    },
+).df()
 ```
 
 ### Data Transformations
@@ -112,14 +126,10 @@ df_final.loc[df_final["county_id"] == "46113", "county_id"] = "46102"
 
 ## Fill in NAs for missing counties
 
-```{python}
-# setup connection variables to local sql db
-database_url = os.getenv("DATABASE_URL")
-engine = create_engine(database_url)
-```
 
 ```{python}
-county_df = pd.read_sql_table("us_counties", engine)
+county_df = con.execute("SELECT * FROM my_db.public.us_counties").df()
+county_df_spacial = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
 ```
 
 ```{python}
@@ -131,7 +141,7 @@ df_final = county_year_df.merge(df_final, on = ["county_id", "year"], how = "lef
 ```
 
 ```{python}
-df_final = spatial_fill(df_final, county_df, fill_type = "fill_na", num_counties = 5)
+df_final = spatial_fill(df_final, county_df_spacial, fill_type = "fill_na", num_counties = 5)
 ```
 
 ## Year Over Year Change Calculation
