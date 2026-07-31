@@ -278,12 +278,12 @@ def eda_summary(df, acceptable_skew = 3.0):
     summary = pd.DataFrame({
         "missing_share": num_df.isna().mean(),
         "n_unique": num_df.nunique(),
-        "std": num_df.std(numeric_only=True),
-        "skew": num_df.skew(numeric_only=True),
+        "std": num_df.std(numeric_only=True).round(3),
+        "skew": num_df.skew(numeric_only=True).round(3),
         "n_zeros": (num_df == 0).sum(),
-        "zero_share": (num_df == 0).mean(),
-        "min": num_df.min(numeric_only = True),
-        "max": num_df.max(numeric_only = True)
+        "zero_share": (num_df == 0).mean().round(3),
+        "min": num_df.min(numeric_only = True).round(3),
+        "max": num_df.max(numeric_only = True).round(3)
     }).sort_values("skew", ascending=False).reset_index().rename(columns={"index": "column"})
 
     summary["can_log"] = summary["min"] > 0
