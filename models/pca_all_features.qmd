@@ -19,6 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from sqlalchemy import create_engine
 import umap
 from imblearn.over_sampling import SMOTE
+import plotly.express as px
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -257,6 +258,35 @@ plt.colorbar(label='Target classes')
 
 plt.tight_layout()
 plt.show()
+```
+
+### 3D PCA plot for fun
+
+```{python}
+pca = PCA(n_components=3)
+X_train_pca = pca.fit_transform(X_train_sm)
+X_test_pca = pca.transform(X_test_scaled)
+
+model_3d = LogisticRegression()
+model_3d.fit(X_train_pca, y_train_sm)
+
+y_pred = model_3d.predict(X_test_pca)
+```
+
+```{python}
+df_pca = pd.DataFrame(X_train_pca, columns=['PC1', 'PC2', 'PC3'])
+df_pca['target'] = y_train_sm
+
+fig = px.scatter_3d(
+    df_pca, 
+    x='PC1', y='PC2', z='PC3', 
+    color='target',
+    opacity=0.5,
+    color_continuous_scale='coolwarm',
+    title="3D PCA Interactive Plot"
+)
+fig.update_traces(marker=dict(size=3))
+fig.show()
 ```
 
 ### UMAP
