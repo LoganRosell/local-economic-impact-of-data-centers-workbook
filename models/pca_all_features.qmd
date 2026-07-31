@@ -20,6 +20,8 @@ from sqlalchemy import create_engine
 import umap
 from imblearn.over_sampling import SMOTE
 import plotly.express as px
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -198,12 +200,13 @@ final_df = final_df.drop(columns=cols_with_high_missingness)
 skewed_cols =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["skew"] > 2].loc[:,"column"]
 
 skewed_cols = skewed_cols.to_list()
+if "datacenters" in skewed_cols:
+    skewed_cols.remove("datacenters")
 
 final_df = final_df.drop(columns=skewed_cols)
 ```
 
 ### PCA
-
 
 ```{python}
 # set up trainning and testing data
@@ -211,34 +214,44 @@ cutoff_year = 2018
 train_mask = final_df['year'] <= cutoff_year
 test_mask = final_df['year'] > cutoff_year
 
-drop_cols = ['has_datacenter', 'year', 'county_id'] 
+drop_cols = ['has_datacenter', 'datacenters', 'year', 'county_id']
 
-X_train = final_df.loc[train_mask].drop(columns=drop_cols, errors='ignore')
-y_train = final_df.loc[train_mask, 'has_datacenter']
+X = final_df.drop(columns=[col for col in drop_cols if col in final_df.columns])
+y_binary = final_df['has_datacenter']
+y_numeric = final_df['datacenters']
 
-X_test = final_df.loc[test_mask].drop(columns=drop_cols, errors='ignore')
-y_test = final_df.loc[test_mask, 'has_datacenter']
+X_train = X.loc[train_mask]
+X_test = X.loc[test_mask]
+
+y_train_bin = y_binary.loc[train_mask]
+y_test_bin = y_binary.loc[test_mask]
+
+y_train_num = y_numeric.loc[train_mask]
+y_test_num = y_numeric.loc[test_mask]
 
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
+# cannot use SMOTE on regression, only classification
 smote = SMOTE(sampling_strategy='minority', random_state=57)
-X_train_sm, y_train_sm = smote.fit_resample(X_train_scaled, y_train)
+X_train_bin_sm, y_train_bin_sm = smote.fit_resample(X_train_scaled, y_train_bin)
 
+```
+
+```{python}
 pca = PCA(n_components=2)
-X_train_pca = pca.fit_transform(X_train_sm)
+X_train_pca = pca.fit_transform(X_train_bin_sm)
 X_test_pca = pca.transform(X_test_scaled)
 
 model = LogisticRegression()
-model.fit(X_train_pca, y_train_sm)
+model.fit(X_train_pca, y_train_bin_sm)
 
 y_pred = model.predict(X_test_pca)
 ```
 
-
 ```{python}
-mlu.model_accuracy_report(model, X_train_pca, y_train_sm, X_test_pca, y_test)
+mlu.model_accuracy_report(model, X_train_pca, y_train_bin_sm, X_test_pca, y_test_bin)
 ```
 
 ```{python}
@@ -264,11 +277,11 @@ plt.show()
 
 ```{python}
 pca = PCA(n_components=3)
-X_train_pca = pca.fit_transform(X_train_sm)
+X_train_pca = pca.fit_transform(X_train_bin_sm)
 X_test_pca = pca.transform(X_test_scaled)
 
 model_3d = LogisticRegression()
-model_3d.fit(X_train_pca, y_train_sm)
+model_3d.fit(X_train_pca, y_train_bin_sm)
 
 y_pred = model_3d.predict(X_test_pca)
 ```
@@ -289,21 +302,64 @@ fig.update_traces(marker=dict(size=3))
 fig.show()
 ```
 
+### Continous PCA
+```{python}
+pca = PCA(n_components=2)
+X_train_pca = pca.fit_transform(X_train_scaled)
+X_test_pca = pca.transform(X_test_scaled)
+
+model_reg = LinearRegression()
+model_reg.fit(X_train_pca, y_train_num)
+
+model_reg = LinearRegression()
+model_reg.fit(X_train_pca, y_train_num)
+
+y_pred_num = model_reg.predict(X_test_pca)
+
+train_r2 = r2_score(y_train_num, model_reg.predict(X_train_pca))
+test_r2 = r2_score(y_test_num, y_pred_num)
+test_rmse = np.sqrt(mean_squared_error(y_test_num, y_pred_num))
+
+print(f"Train R²:  {train_r2:.4f}")
+print(f"Test R²:   {test_r2:.4f}")
+print(f"Test RMSE: {test_rmse:.4f}")
+```
+
+```{python}
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_train_pca[:, 0],
+    X_train_pca[:, 1],
+    c=y_train_num,
+    cmap='viridis',
+    edgecolors='none',
+    s=20,
+    alpha=0.3
+)
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.title('After PCA: Projected Training Set (Linear Regression Target)')
+plt.colorbar(scatter, label='Datacenter Count')
+
+plt.tight_layout()
+plt.show()
+```
+
 ### UMAP
 
 ```{python}
 # un-supervised
 reducer = umap.UMAP(n_components=2, n_neighbors=50, min_dist=0.1, random_state=42)
-X_train_umap = reducer.fit_transform(X_train)
+X_train_umap = reducer.fit_transform(X_train_bin_sm)
 
-X_test_umap = reducer.transform(X_test)
+X_test_umap = reducer.transform(X_test_scaled)
 
 # plot training data
 plt.figure(figsize=(7, 5))
 scatter = plt.scatter(
     X_train_umap[:, 0], 
     X_train_umap[:, 1], 
-    c=y_train, 
+    c=y_train_bin_sm, 
     cmap='coolwarm', 
     edgecolor='k', 
     s=80,
@@ -340,16 +396,16 @@ plt.show()
 ```{python}
 # supervised (has access to y_train data)
 reducer = umap.UMAP(n_components=2, n_neighbors=50, min_dist=0.1, random_state=42)
-X_train_umap = reducer.fit_transform(X_train, y=y_train)
+X_train_umap = reducer.fit_transform(X_train_bin_sm, y=y_train_bin_sm)
 
-X_test_umap = reducer.transform(X_test)
+X_test_umap = reducer.transform(X_test_scaled)
 
 
 plt.figure(figsize=(7, 5))
 scatter = plt.scatter(
     X_train_umap[:, 0], 
     X_train_umap[:, 1], 
-    c=y_train, 
+    c=y_train_bin_sm, 
     cmap='coolwarm', 
     edgecolor='k', 
     s=80,
