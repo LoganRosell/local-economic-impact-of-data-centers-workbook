@@ -314,6 +314,21 @@ plt.title('After PCA: Projected Training Set')
 plt.colorbar(label='Target classes')
 plt.tight_layout()
 plt.show()
+
+plt.scatter(
+    X_test_pca[:, 0],
+    X_test_pca[:, 1],
+    c=y_test_bin,
+    cmap='coolwarm',
+    edgecolor='none',
+    s=20,
+    alpha=0.3)
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.title('After PCA: Projected Test Set')
+plt.colorbar(label='Target classes')
+plt.tight_layout()
+plt.show()
 ```
 
 ```{python}
@@ -343,6 +358,7 @@ y_pred = model_3d.predict(X_test_pca)
 ```
 
 ```{python}
+# Train data 3D plot
 df_pca = pd.DataFrame(X_train_pca, columns=['PC1', 'PC2', 'PC3'])
 df_pca['target'] = y_train_bin_sm
 
@@ -352,7 +368,23 @@ fig = px.scatter_3d(
     color='target',
     opacity=0.5,
     color_continuous_scale='coolwarm',
-    title="3D PCA Interactive Plot"
+    title="3D PCA Interactive Plot Train Data"
+)
+fig.update_traces(marker=dict(size=3))
+fig.show()
+
+
+# Test data 3D plot
+df_pca = pd.DataFrame(X_test_pca, columns=['PC1', 'PC2', 'PC3'])
+df_pca['target'] = y_test_bin
+
+fig = px.scatter_3d(
+    df_pca, 
+    x='PC1', y='PC2', z='PC3', 
+    color='target',
+    opacity=0.5,
+    color_continuous_scale='coolwarm',
+    title="3D PCA Interactive Plot Train Data"
 )
 fig.update_traces(marker=dict(size=3))
 fig.show()
@@ -382,6 +414,7 @@ print(f"Test RMSE: {test_rmse:.4f}")
 ```
 
 ```{python}
+# Regression PCA Trainning Data
 plt.figure(figsize=(7, 5))
 scatter = plt.scatter(
     X_train_pca[:, 0],
@@ -396,7 +429,24 @@ plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
 plt.title('After PCA: Projected Training Set (Linear Regression Target)')
 plt.colorbar(scatter, label='Logged Datacenter Count')
+plt.tight_layout()
+plt.show()
 
+# Regression PCA Testing Data
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_test_pca[:, 0],
+    X_test_pca[:, 1],
+    c=y_test_num,
+    cmap='viridis',
+    edgecolors='none',
+    s=20,
+    alpha=0.3
+)
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.title('After PCA: Projected Training Set (Linear Regression Target)')
+plt.colorbar(scatter, label='Logged Datacenter Count')
 plt.tight_layout()
 plt.show()
 ```
