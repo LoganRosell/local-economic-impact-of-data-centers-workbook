@@ -16,6 +16,9 @@ import importlib
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
 import duckdb
+from linearmodels.panel import PanelOLS
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 importlib.reload(dbu)
 importlib.reload(mlu)
 
@@ -336,4 +339,15 @@ for y_col in outcomes:
         year_fe=True,
         include_information=False
     )
+```
+
+### Logan's Linear Regression Models
+
+```{python}
+ols_model = smf.ols(
+    formula="real_gdp_2017_dollars_thousands_per_capita ~ np.log1p(datacenters) + np.log(population) + C(year) + unemployment_rate_pct + single_family_permits_per_1000 + all_multifamily_permits_per_1000 + pm25_mean_daily_avg + tot_employee_count_industrial_per_capita + tot_employee_count_information_per_capita + tot_employee_count_professional_per_capita + tot_employee_count_public_services_per_capita + tot_employee_count_primary_industries_per_capita + tot_employee_count_trade_transport_per_capita + land_area_sqmi",
+    data=final_df
+).fit()
+
+print(ols_model.summary())
 ```
