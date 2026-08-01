@@ -375,7 +375,7 @@ plt.figure(figsize=(7, 5))
 scatter = plt.scatter(
     X_test_umap[:, 0], 
     X_test_umap[:, 1], 
-    c=y_test, 
+    c=y_test_bin, 
     cmap='coolwarm', 
     edgecolor='k', 
     s=80,
@@ -422,7 +422,7 @@ plt.figure(figsize=(7, 5))
 scatter = plt.scatter(
     X_test_umap[:, 0], 
     X_test_umap[:, 1], 
-    c=y_test, 
+    c=y_test_bin, 
     cmap='coolwarm', 
     edgecolor='k', 
     s=80,
