@@ -13,6 +13,7 @@ scipy
 statsmodels
 imbalanced-learn
 linearmodels
+pyfixest
 
 # Visualization & EDA
 matplotlib
