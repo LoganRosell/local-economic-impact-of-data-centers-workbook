@@ -1,0 +1,288 @@
+```{python}
+import importlib
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+import duckdb
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_numeric_dtype
+from sklearn.metrics import accuracy_score
+from sqlalchemy import create_engine
+import plotly.express as px
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import seaborn as sns
+
+import utils.db_cleaning_utils as dbu
+import utils.ml_modeling_utils as mlu
+
+# Reload custom utilities
+importlib.reload(dbu)
+importlib.reload(mlu)
+
+# Load environment & paths
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+### Loading and merging the data
+
+```{python}
+# Load data
+database_url = os.getenv("DUCKDB_DB_URL")
+
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
+
+dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+near_dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
+air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
+bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
+code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
+gdp_df = con.execute("SELECT * FROM my_db.transformed.gdp").df()
+inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
+pop_df = con.execute("SELECT * FROM my_db.population").df()
+perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
+emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
+county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
+```
+
+
+### Create final table
+
+```{python}
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
+
+final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+
+final_bus_df = dbu.impute_all_columns_vectorized(final_bus_df)
+
+final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
+```
+
+```{python}
+# Create county_year dataframe for merging below
+county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_year_df["water_area_sqmi"]
+```
+
+```{python}
+near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landadj"].round()
+```
+
+```{python}
+# remove land and water areas from air_df to avoid col name conflict in merge step below
+air_df = air_df.drop(columns=["land_area_sqmi", "water_area_sqmi"])
+
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
+```
+
+### Clean up final table
+
+```{python}
+# Make applicable columns per-capita
+bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
+
+cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
+
+per_capita_cols = [
+    "real_gdp_2017_dollars_thousands",
+    "real_gdp_2017_dollars_thousands_spatial_weighted_avg_5",
+    "personal_income_thousands_of_dollars",
+    "personal_income_thousands_of_dollars_spatial_weighted_avg_5",
+    "all_permits",
+    "all_permits_spatial_weighted_avg_5",
+    "single_family_permits",
+    "single_family_permits_spatial_weighted_avg_5",
+    "all_multifamily_permits",
+    "all_multifamily_permits_spatial_weighted_avg_5"
+] + cols
+
+final_df = mlu.make_per_capita(final_df, per_capita_cols)
+
+final_df["single_family_permits_per_1000"] = (
+    final_df["single_family_permits_per_capita"] * 1000
+)
+
+final_df["all_multifamily_permits_per_1000"] = (
+    final_df["all_multifamily_permits_per_capita"] * 1000
+)
+```
+
+```{python}
+# Per-capita data centers (don't drop original though)
+# final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
+# final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
+```
+
+```{python}
+# Rename for clarity
+final_df = final_df.rename(columns = {
+    "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
+    "estabs": "datacenters",
+    "estabs_per_100_sqmi": "datacenters_per_100_sqmi",
+    "nearby_estabs_50mi_landadj": "nearby_datacenters_50mi",
+    "nearby_estabs_50mi_per_100_sqmi": "nearby_datacenters_50mi_per_100_sqmi",
+    "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
+    "unemployment_rate": "unemployment_rate_pct"
+    })
+```
+
+```{python}
+# Drop redundant air quality features
+final_df = final_df.drop(columns=[
+    "pm25_max_sd",
+    "pm25_med_sd",
+    "pm25_max_daily_avg",
+    "pm25_med_daily_avg",
+    "pm25_pop_sd",
+    "pm25_pop_daily_avg",
+    "pm25_max_sd_spatial_weighted_avg_5",
+    "pm25_med_sd_spatial_weighted_avg_5",
+    "pm25_pop_sd_spatial_weighted_avg_5",
+    "pm25_max_daily_avg_spatial_weighted_avg_5",
+    "pm25_med_daily_avg_spatial_weighted_avg_5",
+    "pm25_pop_daily_avg_spatial_weighted_avg_5",
+    "pm25_max_sd_yoy_change",
+    "pm25_med_sd_yoy_change",
+    "pm25_pop_sd_yoy_change",
+    "pm25_max_daily_avg_yoy_change",
+    "pm25_med_daily_avg_yoy_change",
+    "pm25_pop_daily_avg_yoy_change"])
+```
+
+```{python}
+# Drop yoy change features which don't change over time
+final_df = final_df.drop(columns=[
+    "centroid_lon_yoy_change",
+    "centroid_lat_yoy_change",
+    "land_area_sqmi_yoy_change"
+])
+```
+
+```{python}
+# Drop redundant GDP features
+final_df = final_df.drop(columns=[
+    "current_gdp_dollars_thousands",
+    "quantity_index_gdp",
+    "current_gdp_dollars_thousands_spatial_weighted_avg_5",
+    "quantity_index_gdp_spatial_weighted_avg_5"
+])
+```
+
+```{python}
+# Drop centroid data to encourage models to focus on economic factors rather than where a county is
+final_df = final_df.drop(columns=[
+    "centroid_lon",
+    "centroid_lat",
+    "centroid_lon_spatial_weighted_avg_5",
+    "centroid_lat_spatial_weighted_avg_5"
+])
+```
+
+```{python}
+summary_df = mlu.eda_summary(final_df, acceptable_skew = 2.0)
+summary_df
+```
+
+```{python}
+all_dc_cols = ["datacenters", "nearby_datacenters_50mi", "datacenters_per_100_sqmi", "nearby_datacenters_50mi_per_100_sqmi"]
+```
+
+```{python}
+final_df = mlu.apply_suggested_transforms(final_df, summary_df, cols_to_exclude = all_dc_cols)
+final_df
+```
+
+```{python}
+# Add column to county_df which indicates the presence of one or more data centers in a county
+# final_df["has_datacenter"] = final_df["datacenters"] > 0
+```
+
+```{python}
+# drop non-numeric columns which are not helpful ids
+final_df = final_df.drop(columns=[
+    "state_fips_code",
+    "county_fips_code",
+    "county_ns_code",
+    "county_name",
+    "fips_class_code",
+    "functional_status",
+    "state"])
+```
+
+
+```{python}
+# drop features with any missing data
+cols_with_high_missingness =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["missing_share"] > 0].loc[:,"column"]
+
+cols_with_high_missingness = cols_with_high_missingness.to_list()
+
+final_df = final_df.drop(columns=cols_with_high_missingness)
+```
+
+### Drop columns which don't meet LINE assumptions
+```{python}
+# drop features with high skew (proxy for normality)
+skewed_cols =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["skew"] > 2].loc[:,"column"]
+
+skewed_cols = skewed_cols.to_list()
+if "datacenters" in skewed_cols:
+    skewed_cols.remove("datacenters")
+
+final_df = final_df.drop(columns=skewed_cols)
+```
+
+```{python}
+# Drop redundant variables 
+final_df = final_df.drop(columns=[
+    "total_area_sqmi_log",
+    "employed_log",
+    "unemployed_log",
+    "employed_spatial_weighted_avg_5_log",
+    "employed_spatial_weighted_avg_5_log",
+    "employed_yoy_change_log1p",
+    "unemployed_yoy_change_log1p",
+    "contributing_counties_50mi",
+    "raw_overlap_sqmi_50mi_log",
+    "effective_land_overlap_sqmi_50mi",
+    "per_capita_personal_income_dollars_log",
+    "civilian_labor_force_log",
+    "per_capita_personal_income_dollars_spatial_weighted_avg_5",
+    "unemployed_spatial_weighted_avg_5_log",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "tot_employee_count_public_services_per_capita_log1p",
+    "personal_income_thousands_of_dollars_yoy_change"
+], errors="ignore")
+```
+
+### DiD Model
+
+```{python}
+import pyfixest as pf
+
+# Define model with continuous treatment, exogenous controls, two-way fixed effects, and clustered SEs
+did_model = pf.feols(
+    "personal_income_thousands_of_dollars_per_capita_log ~ datacenters + unemployment_rate_pct + pm25_mean_daily_avg | county_id + year",
+    data=final_df,
+    vcov={"CRV1": "county_id"},
+)
+
+print(did_model.summary())
+```
