@@ -23,6 +23,7 @@ import plotly.express as px
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 import seaborn as sns
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -249,32 +250,32 @@ final_df = final_df.drop(columns=skewed_cols)
 
 ```{python}
 # set up trainning and testing data
+
+gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=57)
+train_county_idx, test_county_idx = next(gss.split(final_df, groups=final_df['county_id']))
+
 cutoff_year = 2018
-train_mask = final_df['year'] <= cutoff_year
-test_mask = final_df['year'] > cutoff_year
+
+train_mask = (final_df.index.isin(train_county_idx)) & (final_df['year'] <= cutoff_year)
+test_mask = (final_df.index.isin(test_county_idx)) & (final_df['year'] > cutoff_year)
 
 drop_cols = ['has_datacenter', 'datacenters', 'year', 'county_id']
-
 X = final_df.drop(columns=[col for col in drop_cols if col in final_df.columns])
+
 y_binary = final_df['has_datacenter']
-y_numeric = final_df['datacenters']
-y_numeric = np.log(final_df['datacenters'] + 1 )
-y_numeric.columns = ["dc_logged"]
+y_numeric = np.log(final_df['datacenters'] + 1)
 
-X_train = X.loc[train_mask]
-X_test = X.loc[test_mask]
+X_train, X_test = X.loc[train_mask], X.loc[test_mask]
+y_train_bin, y_test_bin = y_binary.loc[train_mask], y_binary.loc[test_mask]
+y_train_num, y_test_num = y_numeric.loc[train_mask], y_numeric.loc[test_mask]
 
-y_train_bin = y_binary.loc[train_mask]
-y_test_bin = y_binary.loc[test_mask]
+groups_train = final_df.loc[train_mask, 'county_id']
 
-y_train_num = y_numeric.loc[train_mask]
-y_test_num = y_numeric.loc[test_mask]
 
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# cannot use SMOTE on regression, only classification
 smote = SMOTE(sampling_strategy='minority', random_state=57)
 X_train_bin_sm, y_train_bin_sm = smote.fit_resample(X_train_scaled, y_train_bin)
 
@@ -311,7 +312,6 @@ plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
 plt.title('After PCA: Projected Training Set')
 plt.colorbar(label='Target classes')
-
 plt.tight_layout()
 plt.show()
 ```
