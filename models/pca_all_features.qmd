@@ -22,6 +22,7 @@ from imblearn.over_sampling import SMOTE
 import plotly.express as px
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
+import seaborn as sns
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -151,6 +152,48 @@ final_df = final_df.rename(columns = {
 ```
 
 ```{python}
+# Drop redundant air quality features
+final_df = final_df.drop(columns=[
+    "pm25_max_sd",
+    "pm25_med_sd",
+    "pm25_max_daily_avg",
+    "pm25_med_daily_avg",
+    "pm25_pop_sd",
+    "pm25_pop_daily_avg",
+    "pm25_max_sd_spatial_weighted_avg_5",
+    "pm25_med_sd_spatial_weighted_avg_5",
+    "pm25_pop_sd_spatial_weighted_avg_5",
+    "pm25_max_daily_avg_spatial_weighted_avg_5",
+    "pm25_med_daily_avg_spatial_weighted_avg_5",
+    "pm25_pop_daily_avg_spatial_weighted_avg_5",
+    "pm25_max_sd_yoy_change",
+    "pm25_med_sd_yoy_change",
+    "pm25_pop_sd_yoy_change",
+    "pm25_max_daily_avg_yoy_change",
+    "pm25_med_daily_avg_yoy_change",
+    "pm25_pop_daily_avg_yoy_change"])
+```
+
+```{python}
+# Drop yoy change features which don't change over time
+final_df = final_df.drop(columns=[
+    "centroid_lon_yoy_change",
+    "centroid_lat_yoy_change",
+    "land_area_sqmi_yoy_change"
+])
+```
+
+```{python}
+# Drop redundant GDP features
+final_df = final_df.drop(columns=[
+    "current_gdp_dollars_thousands",
+    "quantity_index_gdp",
+    "current_gdp_dollars_thousands_spatial_weighted_avg_5",
+    "quantity_index_gdp_spatial_weighted_avg_5"
+])
+```
+
+```{python}
 summary_df = mlu.eda_summary(final_df, acceptable_skew = 2.0)
 summary_df
 ```
@@ -180,6 +223,7 @@ final_df = final_df.drop(columns=[
     "functional_status",
     "state"])
 ```
+
 
 ```{python}
 # drop features with any missing data
@@ -269,6 +313,19 @@ plt.title('After PCA: Projected Training Set')
 plt.colorbar(label='Target classes')
 
 plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Visualize feature importance for each PCA component
+loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
+print("Loadings:")
+print(loadings)
+
+feature_names = X_train.columns
+plt.figure(figsize=(10, 14))
+sns.heatmap(loadings, annot=True, cmap='coolwarm', xticklabels=['PC1', 'PC2'], yticklabels=feature_names)
+plt.title('Feature Importance in Principal Components')
 plt.show()
 ```
 
