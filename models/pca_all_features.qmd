@@ -195,6 +195,16 @@ final_df = final_df.drop(columns=[
 ```
 
 ```{python}
+# Drop centroid data to encourage models to focus on economic factors rather than where a county is
+final_df = final_df.drop(columns=[
+    "centroid_lon",
+    "centroid_lat",
+    "centroid_lon_spatial_weighted_avg_5",
+    "centroid_lat_spatial_weighted_avg_5"
+])
+```
+
+```{python}
 summary_df = mlu.eda_summary(final_df, acceptable_skew = 2.0)
 summary_df
 ```
