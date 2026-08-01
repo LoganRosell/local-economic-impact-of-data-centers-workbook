@@ -236,6 +236,8 @@ X_train_bin_sm, y_train_bin_sm = smote.fit_resample(X_train_scaled, y_train_bin)
 
 ```
 
+#### 2D PCA Plot
+
 ```{python}
 pca = PCA(n_components=2)
 X_train_pca = pca.fit_transform(X_train_bin_sm)
@@ -270,7 +272,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-### 3D PCA plot for fun
+#### 3D PCA plot for fun
 
 ```{python}
 pca = PCA(n_components=3)
