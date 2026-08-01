@@ -256,7 +256,7 @@ mlu.model_accuracy_report(model, X_train_pca, y_train_bin_sm, X_test_pca, y_test
 plt.scatter(
     X_train_pca[:, 0],
     X_train_pca[:, 1],
-    c=y_train_sm,
+    c=y_train_bin_sm,
     cmap='coolwarm',
     edgecolor='none',
     s=20,
@@ -285,7 +285,7 @@ y_pred = model_3d.predict(X_test_pca)
 
 ```{python}
 df_pca = pd.DataFrame(X_train_pca, columns=['PC1', 'PC2', 'PC3'])
-df_pca['target'] = y_train_sm
+df_pca['target'] = y_train_bin_sm
 
 fig = px.scatter_3d(
     df_pca, 
