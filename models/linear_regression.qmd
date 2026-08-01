@@ -207,6 +207,11 @@ regression_df
 ```
 
 ```{python}
+# Apply log function to all datacenter features (this helped with predicting data center count)
+# regression_df[all_dc_cols] = np.log1p(regression_df[all_dc_cols])
+```
+
+```{python}
 for col in all_dc_cols:
     regression_df = mlu.add_lags(regression_df, col, lags=(1, 2, 3))
 ```
