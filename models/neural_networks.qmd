@@ -123,9 +123,9 @@ final_df["all_multifamily_permits_per_1000"] = (
 ```
 
 ```{python}
-# Per-capita data centers (don't drop original though)
-final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
-final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
+
+# final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
+# final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
 ```
 
 ```{python}
