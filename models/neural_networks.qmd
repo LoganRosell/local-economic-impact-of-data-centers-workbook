@@ -311,8 +311,9 @@ test_loss_history = []
 
 # Training Loop
 epochs = 50
-model.train()
 for epoch in range(epochs):
+    # --- Training Phase ---
+    model.train()
     total_loss = 0.0
     for x_batch, year_batch in train_loader:
         x_batch = x_batch.to(device)
@@ -325,22 +326,38 @@ for epoch in range(epochs):
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
+        
         total_loss += loss.item()
         
-    # Calculate average loss per sample for the epoch
     avg_epoch_loss = total_loss / len(train_loader.dataset)
     loss_history.append(avg_epoch_loss)
     
+    # --- Testing Phase ---
+    model.eval()
+    total_test_loss = 0.0
+    with torch.no_grad():
+        for x_batch, year_batch in test_loader:
+            x_batch = x_batch.to(device)
+            year_batch = year_batch.to(device)
+            
+            recon_batch, mu, logvar = model(x_batch, year_batch)
+            test_loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
+            total_test_loss += test_loss.item()
+            
+    avg_test_loss = total_test_loss / len(test_loader.dataset)
+    test_loss_history.append(avg_test_loss)
+    
     if (epoch + 1) % 10 == 0:
-        print(f"Epoch [{epoch+1}/{epochs}] - Loss per sample: {avg_epoch_loss:.4f}")
+        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_epoch_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
 ```
 
 ```{python}
 plt.figure(figsize=(8, 4))
 plt.plot(range(1, epochs + 1), loss_history, label="Training Loss")
+plt.plot(range(1, epochs + 1), test_loss_history, label="Testing Loss", linestyle="--")
 plt.xlabel("Epoch")
 plt.ylabel("Loss per Sample")
-plt.title("VAE Training Loss Over Time")
+plt.title("VAE Loss Over Time")
 plt.grid(True, linestyle="--", alpha=0.5)
 plt.legend()
 plt.show()
