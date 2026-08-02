@@ -275,7 +275,6 @@ final_df = final_df.drop(columns=[
 
 ### DiD Model
 
-#### Testing the effect adding the first DC to a county over time
 ```{python}
 # create columns to track if and when a county got its first dc
 first_treated = (
@@ -302,27 +301,71 @@ final_df["rel_year"] = final_df.apply(
 )
 ```
 
-```{python}
+#### Testing the effect adding the first DC to a county over time on personal income
 
-event_study = pf.feols(
-    "personal_income_thousands_of_dollars_per_capita_log ~ i(rel_year, ref=-1) + unemployment_rate_pct + pm25_mean_daily_avg | county_id + year",
-    data=final_df[
-        final_df["rel_year"].between(-5, 5) | (final_df["rel_year"] == -100)
-    ],
-    vcov={"CRV1": "county_id"},
+```{python}
+from diff_diff import CallawaySantAnna
+
+# 1. Subset data for your evaluation window (or use full final_df directly)
+eval_data = final_df[
+    final_df["rel_year"].between(-5, 5) | (final_df["rel_year"] == -100)
+].copy()
+
+# 2. Instantiate Callaway-Sant'Anna model
+cs = CallawaySantAnna(
+    control_group="never_treated",  # Uses first_dc_year == 0 as control
+    estimation_method="dr",          # Doubly Robust estimation
 )
 
-event_study.iplot()
+# 3. Fit model using your exact column names
+results = cs.fit(
+    data=eval_data,
+    outcome="personal_income_thousands_of_dollars_per_capita_log",
+    unit="county_id",
+    time="year",
+    first_treat="first_dc_year",
+    covariates=["unemployment_rate_pct", "pm25_mean_daily_avg"],
+    aggregate="all"  # Computes overall ATT, group effects, and event study
+)
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# 1. Convert dict to DataFrame using .from_dict()
+es_df = pd.DataFrame.from_dict(results.event_study_effects, orient="index").sort_index()
+
+# Extract pre-calculated CIs
+es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
+es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
+
+# 2. Plot
+plt.figure(figsize=(9, 5))
+
+plt.errorbar(
+    x=es_df.index,
+    y=es_df["effect"],
+    yerr=[es_df["effect"] - es_df["ci_lower"], es_df["ci_upper"] - es_df["effect"]],
+    fmt="o",
+    color="#1f77b4",
+    ecolor="#1f77b4",
+    elinewidth=1.5,
+    capsize=4,
+    capthick=1.5,
+    label="ATT Estimate (95% CI)",
+)
+
+plt.plot(es_df.index, es_df["effect"], color="#1f77b4", linestyle="--", alpha=0.7)
+plt.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.7)
+plt.axvline(-1, color="red", linestyle=":", linewidth=1.2, label="Pre-treatment Ref (t=-1)")
+
+plt.title("Event Study: Callaway-Sant'Anna DiD Estimates", fontsize=13, fontweight="bold", pad=12)
+plt.xlabel("Relative Year to Treatment", fontsize=11)
+plt.ylabel("Log Personal Income per Capita", fontsize=11)
+plt.xticks(es_df.index)
+plt.grid(True, linestyle="--", alpha=0.4)
+plt.legend(frameon=True, loc="best")
+
+plt.tight_layout()
+plt.show()
 ```
 
-```{python}
-print(event_study.summary())
-```
-
-```{python}
-# check the distribution of the residuals
-residuals = event_study.resid()
-fitted_values = event_study.predict()
-
-mlu.plot_model_residuals(residuals, fitted_values)
-```
