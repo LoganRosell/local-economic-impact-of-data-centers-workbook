@@ -183,33 +183,46 @@ df = final_df
 ### Prepare data for VAE
 
 ```{python}
-county_ids = df["county_id"].values
-years = df["year"].values
 
 unique_years = sorted(df["year"].unique())
 year_to_idx = {yr: i for i, yr in enumerate(unique_years)}
-year_indices = np.array([year_to_idx[yr] for yr in years])
+df["year_idx"] = df["year"].map(year_to_idx)
 
-# Drop identifiers from feature matrix
-features_df = df.drop(columns=["county_id", "year"]).copy()
+test_years_count = 2 
+train_years = unique_years[:-test_years_count]
+test_years = unique_years[-test_years_count:]
 
-features_df["has_datacenter"] = features_df["has_datacenter"].astype(float)
+train_mask = df["year"].isin(train_years)
+test_mask = df["year"].isin(test_years)
 
-# Year-Grouped Feature Scaling (Standardize features relative to each year's baseline)
-scaled_chunks = []
-for yr, group in features_df.groupby(df["year"]):
-    scaler = StandardScaler()
-    scaled_chunks.append(pd.DataFrame(scaler.fit_transform(group), index=group.index, columns=features_df.columns))
+train_df = df[train_mask].copy()
+test_df = df[test_mask].copy()
 
-features_scaled = pd.concat(scaled_chunks).sort_index().values
+# Feature selection
+feature_cols = [c for c in df.columns if c not in ["county_id", "year", "year_idx"]]
 
-X_tensor = torch.tensor(features_scaled, dtype=torch.float32)
-year_tensor = torch.tensor(year_indices, dtype=torch.long)
+train_df["has_datacenter"] = train_df["has_datacenter"].astype(float)
+test_df["has_datacenter"] = test_df["has_datacenter"].astype(float)
 
-dataset = TensorDataset(X_tensor, year_tensor)
-train_loader = DataLoader(dataset, batch_size=128, shuffle=True)
+# Fit scaler ONLY on the training data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(train_df[feature_cols])
 
-input_dim = X_tensor.shape[1]
+X_test_scaled = scaler.transform(test_df[feature_cols])
+
+X_train_tensor = torch.tensor(X_train_scaled, dtype=torch.float32)
+year_train_tensor = torch.tensor(train_df["year_idx"].values, dtype=torch.long)
+
+X_test_tensor = torch.tensor(X_test_scaled, dtype=torch.float32)
+year_test_tensor = torch.tensor(test_df["year_idx"].values, dtype=torch.long)
+
+train_dataset = TensorDataset(X_train_tensor, year_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, year_test_tensor)
+
+train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False) 
+
+input_dim = X_train_tensor.shape[1]
 num_years = len(unique_years)
 ```
 
