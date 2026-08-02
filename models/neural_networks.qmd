@@ -307,6 +307,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # Initialize list to store loss per epoch
 loss_history = []
+test_loss_history = []
 
 # Training Loop
 epochs = 50
@@ -322,7 +323,7 @@ for epoch in range(epochs):
         loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
         
         loss.backward()
-        torch.nn.utils.clip_grad_norm_
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         total_loss += loss.item()
         
