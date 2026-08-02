@@ -16,6 +16,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import seaborn as sns
+import pyfixest as pf
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -274,15 +275,71 @@ final_df = final_df.drop(columns=[
 
 ### DiD Model
 
+#### Testing the effect adding the first DC to a county over time
 ```{python}
-import pyfixest as pf
+# create columns to track if and when a county got its first dc
+first_treated = (
+    final_df[final_df["datacenters"] > 0]
+    .groupby("county_id")["year"]
+    .min()
+    .reset_index()
+    .rename(columns={"year": "first_dc_year"})
+)
 
-# Define model with continuous treatment, exogenous controls, two-way fixed effects, and clustered SEs
-did_model = pf.feols(
-    "personal_income_thousands_of_dollars_per_capita_log ~ datacenters + unemployment_rate_pct + pm25_mean_daily_avg | county_id + year",
-    data=final_df,
+final_df = final_df.merge(first_treated, on="county_id", how="left")
+final_df["first_dc_year"] = final_df["first_dc_year"].fillna(0).astype(int)
+
+final_df["treated"] = (
+    (final_df["first_dc_year"] > 0)
+    & (final_df["year"] >= final_df["first_dc_year"])
+).astype(int)
+
+# Create relative time variable: t - first_dc_year (e.g., -2, -1, 0, 1, 2)
+# Set never-treated (first_dc_year == 0) relative time to -100
+final_df["rel_year"] = final_df.apply(
+    lambda x: x["year"] - x["first_dc_year"] if x["first_dc_year"] > 0 else -100,
+    axis=1,
+)
+```
+
+```{python}
+
+event_study = pf.feols(
+    "personal_income_thousands_of_dollars_per_capita_log ~ i(rel_year, ref=-1) + unemployment_rate_pct + pm25_mean_daily_avg | county_id + year",
+    data=final_df[
+        final_df["rel_year"].between(-5, 5) | (final_df["rel_year"] == -100)
+    ],
     vcov={"CRV1": "county_id"},
 )
 
-print(did_model.summary())
+event_study.iplot()
+```
+
+
+```{python}
+print(event_study.summary())
+```
+
+```{python}
+# check the distribution of the residuals
+residuals = event_study.resid()
+fitted_values = event_study.predict()
+
+plt.figure(figsize=(8, 5))
+plt.scatter(fitted_values, residuals, alpha=0.3, color="navy", edgecolors="none")
+plt.axhline(0, color="red", linestyle="--", linewidth=1.5)
+plt.xlabel("Fitted Values")
+plt.ylabel("Residuals")
+plt.title("Residuals vs. Fitted Values")
+plt.grid(True, linestyle=":", alpha=0.6)
+plt.show()
+
+plt.figure(figsize=(8, 5))
+sns.histplot(residuals, kde=True, color="navy", bins=50)
+plt.axvline(0, color="red", linestyle="--")
+plt.xlabel("Residual Value")
+plt.ylabel("Frequency")
+plt.title("Distribution of Model Residuals")
+plt.grid(True, linestyle=":", alpha=0.6)
+plt.show()
 ```
