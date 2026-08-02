@@ -13,6 +13,7 @@ import statsmodels.formula.api as smf
 from scipy.stats import probplot
 import statsmodels.api as sm 
 import linearmodels as lm
+from diff_diff import CallawaySantAnna
 
 # slice df to specific year
 def return_specific_year(df, year):
@@ -841,6 +842,36 @@ def plot_model_residuals(residuals, fitted_values):
     plt.title("Distribution of Model Residuals")
     plt.grid(True, linestyle=":", alpha=0.6)
     plt.show()
+
+
+def create_DiD_model(df, y_var):
+    cs = CallawaySantAnna(
+    control_group="never_treated",  
+    estimation_method="reg",
+    allow_unbalanced_panel=True
+    )
+
+    results = cs.fit(
+        data=df,
+        outcome=y_var,
+        unit="county_id",
+        time="year",
+        first_treat="first_dc_year",
+        covariates=[],
+        aggregate="all"
+    )
+
+    es_df = (
+        pd.DataFrame.from_dict(results.event_study_effects, orient="index")
+        .sort_index()
+        .loc[-5:5]
+    )
+    es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
+    es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
+
+    return results, es_df
+
+
 
 def DiD_coeff_plot(es_df, y_var):
     plt.figure(figsize=(9, 5))
