@@ -171,6 +171,15 @@ final_df = final_df.drop(columns=[
 ```
 
 ```{python}
+# Drop yoy change features which don't change over time
+final_df = final_df.drop(columns=[
+    "centroid_lon_yoy_change",
+    "centroid_lat_yoy_change",
+    "land_area_sqmi_yoy_change"
+])
+```
+
+```{python}
 # drop features with any missing data
 cols_with_high_missingness =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["missing_share"] > 0].loc[:,"column"]
 
