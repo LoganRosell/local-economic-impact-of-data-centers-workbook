@@ -257,10 +257,9 @@ class TimeEmbeddedTabularVAE(nn.Module):
         return mu + eps * std
 
     def forward(self, x, year_idx):
-        # 1. Lookup year embedding
         t_embed = self.year_embedding(year_idx) # Shape: (batch_size, time_embed_dim)
         
-        # 2. Concatenate features + year embedding for Encoder
+        # Concatenate features + year embedding for Encoder
         x_enc_input = torch.cat([x, t_embed], dim=1)
         h = self.encoder(x_enc_input)
         
@@ -268,7 +267,7 @@ class TimeEmbeddedTabularVAE(nn.Module):
         logvar = self.fc_logvar(h)
         z = self.reparameterize(mu, logvar)
         
-        # 3. Concatenate latent vector (z) + year embedding for Decoder
+        # Concatenate latent vector + year embedding for Decoder
         z_dec_input = torch.cat([z, t_embed], dim=1)
         x_recon = self.decoder(z_dec_input)
         
@@ -310,6 +309,7 @@ for epoch in range(epochs):
         loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
         
         loss.backward()
+        torch.nn.utils.clip_grad_norm_
         optimizer.step()
         total_loss += loss.item()
         
