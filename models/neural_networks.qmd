@@ -16,6 +16,8 @@ import plotly.express as px
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import torch.nn as nn
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, roc_auc_score
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -228,8 +230,11 @@ year_train_tensor = torch.tensor(train_df["year_idx"].values, dtype=torch.long)
 X_test_tensor = torch.tensor(X_test_scaled, dtype=torch.float32)
 year_test_tensor = torch.tensor(test_df["year_idx"].values, dtype=torch.long)
 
-train_dataset = TensorDataset(X_train_tensor, year_train_tensor)
-test_dataset = TensorDataset(X_test_tensor, year_test_tensor)
+y_train_tensor = torch.tensor(train_df["has_datacenter"].values, dtype=torch.float32)
+y_test_tensor = torch.tensor(test_df["has_datacenter"].values, dtype=torch.float32)
+
+train_dataset = TensorDataset(X_train_tensor, year_train_tensor, y_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, year_test_tensor, y_test_tensor)
 
 train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
@@ -345,7 +350,7 @@ for epoch in range(epochs):
     # --- Training Phase ---
     model.train()
     total_loss = 0.0
-    for x_batch, year_batch in train_loader:
+    for x_batch, year_batch, _ in train_loader:
         x_batch = x_batch.to(device)
         year_batch = year_batch.to(device)
         
@@ -366,7 +371,7 @@ for epoch in range(epochs):
     model.eval()
     total_test_loss = 0.0
     with torch.no_grad():
-        for x_batch, year_batch in test_loader:
+        for x_batch, year_batch, _ in test_loader:
             x_batch = x_batch.to(device)
             year_batch = year_batch.to(device)
             
@@ -404,7 +409,7 @@ all_targets = []
 
 # Collect all test predictions and targets
 with torch.no_grad():
-    for x_batch, year_batch in test_loader:
+    for x_batch, year_batch, _ in test_loader:
         x_batch = x_batch.to(device)
         year_batch = year_batch.to(device)
         
@@ -432,4 +437,61 @@ print(mse_df.head(10).to_string(index=False))
 
 print("\n--- Top 10 Easiest Features to Reconstruct ---")
 print(mse_df.tail(10).to_string(index=False))
+```
+
+
+### Extract Latent Space Features
+```{python}
+model.eval()
+
+latents = []
+
+eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
+
+with torch.no_grad():
+    for x_batch, year_batch, _ in eval_train_loader:  # Unpack 3 values
+        x_batch = x_batch.to(device)
+        year_batch = year_batch.to(device)
+        
+        # Extract mean vector (z_mu)
+        _, mu, _ = model(x_batch, year_batch)
+        latents.append(mu.cpu().numpy())
+
+# Convert to DataFrame
+latent_cols = [f"z_{i}" for i in range(latents[0].shape[1])]
+z_df = pd.DataFrame(np.vstack(latents), columns=latent_cols)
+```
+
+
+```{python}
+
+# Create non-shuffled evaluation DataLoaders
+eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
+eval_test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+
+# Updated extraction function pulling Z and Y together
+def get_latents_and_targets(loader):
+    model.eval()
+    Z, Y = [], []
+    with torch.no_grad():
+        for x_b, year_b, y_b in loader:  # Unpack x, year, y
+            _, mu, _ = model(x_b.to(device), year_b.to(device))
+            Z.append(mu.cpu().numpy())
+            Y.append(y_b.numpy())  # Collect aligned targets
+            
+    return np.vstack(Z), np.concatenate(Y)
+
+# Extract aligned representations and targets
+Z_train, y_train = get_latents_and_targets(eval_train_loader)
+Z_test, y_test = get_latents_and_targets(eval_test_loader)
+
+# Train balanced Logistic Regression
+clf = LogisticRegression(class_weight="balanced", max_iter=1000)
+clf.fit(Z_train, y_train)
+
+preds = clf.predict_proba(Z_test)[:, 1]
+print(f"Test ROC-AUC using ONLY 8 Latent Dimensions: {roc_auc_score(y_test, preds):.4f}")
+
+# Custom accuracy report
+mlu.model_accuracy_report(clf, Z_train, y_train, Z_test, y_test)
 ```
