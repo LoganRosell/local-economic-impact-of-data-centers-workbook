@@ -532,3 +532,42 @@ print(f"Test ROC-AUC using ONLY 8 Latent Dimensions: {roc_auc_score(y_test, pred
 # Custom accuracy report
 mlu.model_accuracy_report(clf, Z_train, y_train, Z_test, y_test)
 ```
+
+### Test the differnce in predictions when increaseing DC bin by one
+
+```{python}
+model.eval()
+
+x_real, year_real, dc_bin_real, _ = next(iter(eval_test_loader))
+x_real = x_real.to(device)
+year_real = year_real.to(device)
+dc_bin_real = dc_bin_real.to(device)
+
+with torch.no_grad():
+    # Encode county into intrinsic z using baseline bin
+    mu_z, _ = model.encode(x_real, year_real, dc_bin_real)
+    
+    # Reconstruct baseline features
+    x_baseline_recon = model.decode(mu_z, year_real, dc_bin_real)
+    
+    # Step up datacenter bin by +1
+    dc_bin_cf = torch.clamp(dc_bin_real + 1, max=7)
+    
+    # Decode using modified condition vector
+    x_cf_recon = model.decode(mu_z, year_real, dc_bin_cf)
+
+# Transform predictions to original units
+baseline_features = scaler.inverse_transform(x_baseline_recon.cpu().numpy())
+cf_features = scaler.inverse_transform(x_cf_recon.cpu().numpy())
+
+# Measure predicted economic impact
+
+# Filter out counties that are already in the highest bin (Bin 7)
+non_max_mask = (dc_bin_real < 7).cpu().numpy()
+
+# Calculate impact only for counties that actually received an intervention
+valid_impact_df = impact_df[non_max_mask]
+
+print("--- Top Predicted Economic Impacts (+1 DC Tier) for Non-Max Counties ---")
+print(valid_impact_df.mean().sort_values(ascending=False).head(10))
+```
