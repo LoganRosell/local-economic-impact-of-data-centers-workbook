@@ -327,37 +327,9 @@ es_df = (
     .sort_index()
     .loc[-5:5]
 )
-
 es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
 es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
 
-plt.figure(figsize=(9, 5))
-
-plt.errorbar(
-    x=es_df.index,
-    y=es_df["effect"],
-    yerr=[es_df["effect"] - es_df["ci_lower"], es_df["ci_upper"] - es_df["effect"]],
-    fmt="o",
-    color="#1f77b4",
-    ecolor="#1f77b4",
-    elinewidth=1.5,
-    capsize=4,
-    capthick=1.5,
-    label="ATT Estimate (95% CI)",
-)
-
-plt.plot(es_df.index, es_df["effect"], color="#1f77b4", linestyle="--", alpha=0.7)
-plt.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.7)
-plt.axvline(-1, color="red", linestyle=":", linewidth=1.2, label="Pre-treatment Ref (t=-1)")
-
-plt.title("Event Study: Callaway-Sant'Anna DiD Estimates", fontsize=13, fontweight="bold", pad=12)
-plt.xlabel("Relative Year to Treatment", fontsize=11)
-plt.ylabel("Log Personal Income per Capita", fontsize=11)
-plt.xticks(es_df.index)
-plt.grid(True, linestyle="--", alpha=0.4)
-plt.legend(frameon=True, loc="best")
-
-plt.tight_layout()
-plt.show()
+mlu.DiD_coeff_plot(es_df, "Log Personal Income per Capita")
 ```
 
