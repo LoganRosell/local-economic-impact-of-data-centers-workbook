@@ -17,6 +17,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import seaborn as sns
 import pyfixest as pf
+from diff_diff import CallawaySantAnna
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -304,41 +305,32 @@ final_df["rel_year"] = final_df.apply(
 #### Testing the effect adding the first DC to a county over time on personal income
 
 ```{python}
-from diff_diff import CallawaySantAnna
 
-# 1. Subset data for your evaluation window (or use full final_df directly)
-eval_data = final_df[
-    final_df["rel_year"].between(-5, 5) | (final_df["rel_year"] == -100)
-].copy()
-
-# 2. Instantiate Callaway-Sant'Anna model
 cs = CallawaySantAnna(
-    control_group="never_treated",  # Uses first_dc_year == 0 as control
-    estimation_method="dr",          # Doubly Robust estimation
+    control_group="never_treated",  
+    estimation_method="reg",
+    allow_unbalanced_panel=True
 )
 
-# 3. Fit model using your exact column names
 results = cs.fit(
-    data=eval_data,
+    data=final_df,
     outcome="personal_income_thousands_of_dollars_per_capita_log",
     unit="county_id",
     time="year",
     first_treat="first_dc_year",
     covariates=["unemployment_rate_pct", "pm25_mean_daily_avg"],
-    aggregate="all"  # Computes overall ATT, group effects, and event study
+    aggregate="all"
 )
 
-import matplotlib.pyplot as plt
-import pandas as pd
+es_df = (
+    pd.DataFrame.from_dict(results.event_study_effects, orient="index")
+    .sort_index()
+    .loc[-5:5]
+)
 
-# 1. Convert dict to DataFrame using .from_dict()
-es_df = pd.DataFrame.from_dict(results.event_study_effects, orient="index").sort_index()
-
-# Extract pre-calculated CIs
 es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
 es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
 
-# 2. Plot
 plt.figure(figsize=(9, 5))
 
 plt.errorbar(
