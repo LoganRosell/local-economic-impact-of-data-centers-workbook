@@ -13,6 +13,7 @@ Thumbs.db
 
 # VS code settings
 .vscode/
+*.vdoc.*
 
 # Log files
 *.log
