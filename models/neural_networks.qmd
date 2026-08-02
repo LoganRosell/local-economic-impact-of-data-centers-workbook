@@ -584,7 +584,7 @@ baseline_features = scaler.inverse_transform(x_baseline_recon.cpu().numpy())
 cf_features = scaler.inverse_transform(x_cf_recon.cpu().numpy())
 
 # Measure predicted economic impact
-
+impact_df = pd.DataFrame(cf_features - baseline_features, columns=feature_cols)
 # Filter out counties that are already in the highest bin (Bin 7)
 non_max_mask = (dc_bin_real < 7).cpu().numpy()
 
