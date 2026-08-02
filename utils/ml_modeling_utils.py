@@ -841,3 +841,33 @@ def plot_model_residuals(residuals, fitted_values):
     plt.title("Distribution of Model Residuals")
     plt.grid(True, linestyle=":", alpha=0.6)
     plt.show()
+
+def DiD_coeff_plot(es_df, y_var):
+    plt.figure(figsize=(9, 5))
+
+    plt.errorbar(
+        x=es_df.index,
+        y=es_df["effect"],
+        yerr=[es_df["effect"] - es_df["ci_lower"], es_df["ci_upper"] - es_df["effect"]],
+        fmt="o",
+        color="#1f77b4",
+        ecolor="#1f77b4",
+        elinewidth=1.5,
+        capsize=4,
+        capthick=1.5,
+        label="ATT Estimate (95% CI)",
+    )
+
+    plt.plot(es_df.index, es_df["effect"], color="#1f77b4", linestyle="--", alpha=0.7)
+    plt.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.7)
+
+    plt.title(f"Event Study: Data Center Impact on {y_var}", fontsize=13, fontweight="bold", pad=12)
+    plt.xlabel("Relative Year to Data Center Addition", fontsize=11)
+    plt.ylabel(f"Difference in {y_var}", fontsize=11)
+    plt.xticks(es_df.index)
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.legend(frameon=True, loc="best")
+
+    plt.tight_layout()
+    plt.grid(False)
+    plt.show()
