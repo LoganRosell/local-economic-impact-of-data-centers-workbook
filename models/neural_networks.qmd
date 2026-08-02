@@ -200,7 +200,30 @@ final_df = final_df.drop(columns=[
 final_df = final_df.drop(columns=[
     "centroid_lon_yoy_change",
     "centroid_lat_yoy_change",
-    "land_area_sqmi_yoy_change"
+    "land_area_sqmi_yoy_change",
+    "water_area_sqmi_yoy_change"
+])
+```
+
+```{python}
+# Drop columns which don't seem helpful
+final_df = final_df.drop(columns=[
+    "water_area_sqmi",
+    "land_area_sqmi_log",
+    "pm25_pop_sd_log",
+    "pm25_pop_daily_avg",
+    "centroid_lon_spatial_weighted_avg_5",
+    "centroid_lat_spatial_weighted_avg_5",
+    "land_area_sqmi_spatial_weighted_avg_5_log",
+    "water_area_sqmi_spatial_weighted_avg_5_log",
+    "pm25_pop_sd_spatial_weighted_avg_5_log",
+    "pm25_pop_daily_avg_yoy_change",
+    "quantity_index_gdp_log",
+    "quantity_index_gdp_spatial_weighted_avg_5",
+    "quantity_index_gdp_yoy_change",
+    "contributing_counties_50mi",
+    "raw_overlap_sqmi_50mi_log",
+    "effective_land_overlap_sqmi_50mi"
 ])
 ```
 
