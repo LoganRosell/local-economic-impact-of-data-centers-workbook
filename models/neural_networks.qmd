@@ -321,7 +321,7 @@ model = TimeEmbeddedTabularVAE(
     input_dim=input_dim, 
     num_years=num_years, 
     time_embed_dim=8, 
-    hidden_dim=32, 
+    hidden_dim=16, 
     latent_dim=4
 ).to(device)
 
