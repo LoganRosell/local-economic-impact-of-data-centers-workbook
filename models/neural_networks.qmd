@@ -161,6 +161,29 @@ final_df["has_datacenter"] = final_df["datacenters"] > 0
 ```
 
 ```{python}
+# created binned column to track 8 different sized of data center counts
+def get_dc_bin(count):
+    if count == 0:
+        return 0
+    elif count == 1:
+        return 1
+    elif count == 2:
+        return 2
+    elif count <= 5:
+        return 3
+    elif count <= 15:
+        return 4
+    elif count <= 50:
+        return 5
+    elif count <= 150:
+        return 6
+    else:
+        return 7  # Mega-clusters (>150)
+
+final_df["dc_bin"] = final_df["datacenters"].apply(get_dc_bin)
+```
+
+```{python}
 # drop non-numeric columns which are not helpful ids
 final_df = final_df.drop(columns=[
     "state_fips_code",
@@ -212,8 +235,9 @@ test_mask = df["county_id"].isin(test_counties)
 train_df = df[train_mask].copy()
 test_df = df[test_mask].copy()
 
-# Feature selection (excludes county_id, year, and year_idx)
-feature_cols = [c for c in df.columns if c not in ["county_id", "year", "year_idx"]]
+# Exclude condition/target columns from features
+condition_cols = ["county_id", "year", "year_idx", "datacenters", "dc_bin", "has_datacenter"]
+feature_cols = [c for c in df.columns if c not in condition_cols]
 
 train_df["has_datacenter"] = train_df["has_datacenter"].astype(float)
 test_df["has_datacenter"] = test_df["has_datacenter"].astype(float)
@@ -233,8 +257,12 @@ year_test_tensor = torch.tensor(test_df["year_idx"].values, dtype=torch.long)
 y_train_tensor = torch.tensor(train_df["has_datacenter"].values, dtype=torch.float32)
 y_test_tensor = torch.tensor(test_df["has_datacenter"].values, dtype=torch.float32)
 
-train_dataset = TensorDataset(X_train_tensor, year_train_tensor, y_train_tensor)
-test_dataset = TensorDataset(X_test_tensor, year_test_tensor, y_test_tensor)
+
+dc_train_tensor = torch.tensor(train_df["dc_bin"].values, dtype=torch.long)
+dc_test_tensor = torch.tensor(test_df["dc_bin"].values, dtype=torch.long)
+
+train_dataset = TensorDataset(X_train_tensor, year_train_tensor, dc_train_tensor, y_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, year_test_tensor, dc_test_tensor, y_test_tensor)
 
 train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
@@ -245,15 +273,17 @@ num_years = len(unique_years)
 
 
 ```{python}
-class TimeEmbeddedTabularVAE(nn.Module):
-    def __init__(self, input_dim, num_years, time_embed_dim=8, hidden_dim_1=32, hidden_dim_2=16, latent_dim=8):
-        super(TimeEmbeddedTabularVAE, self).__init__()
+class DCandYearConditionedVAE(nn.Module):
+    def __init__(self, input_dim, num_years, time_embed_dim=8, dc_bins=8,dc_embed_dim=4, hidden_dim_1=32, hidden_dim_2=16, latent_dim=8):
+        super(DCandYearConditionedVAE, self).__init__()
         
         # Trainable Year Embedding
         self.year_embedding = nn.Embedding(num_embeddings=num_years, embedding_dim=time_embed_dim)
+        self.dc_embedding = nn.Embedding(num_embeddings=dc_bins, embedding_dim=dc_embed_dim)
         
-        # Combined Input Dimension: Continuous Features + Year Embedding
-        encoder_input_dim = input_dim + time_embed_dim
+        cond_dim = time_embed_dim + dc_embed_dim
+        # Combined Input Dimension: Continuous Features + Year + DC
+        encoder_input_dim = input_dim + cond_dim
         
         # Encoder
         self.encoder = nn.Sequential(
@@ -273,7 +303,7 @@ class TimeEmbeddedTabularVAE(nn.Module):
         self.fc_logvar = nn.Linear(hidden_dim_2, latent_dim)
         
         # Decoder Input: Latent vector (z) + Year Embedding
-        decoder_input_dim = latent_dim + time_embed_dim
+        decoder_input_dim = latent_dim + cond_dim
 
         self.decoder = nn.Sequential(
             nn.Linear(decoder_input_dim, hidden_dim_2),
@@ -294,21 +324,23 @@ class TimeEmbeddedTabularVAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def forward(self, x, year_idx):
-        t_embed = self.year_embedding(year_idx) # Shape: (batch_size, time_embed_dim)
-        
-        # Concatenate features + year embedding for Encoder
-        x_enc_input = torch.cat([x, t_embed], dim=1)
-        h = self.encoder(x_enc_input)
-        
-        mu = self.fc_mu(h)
-        logvar = self.fc_logvar(h)
-        z = self.reparameterize(mu, logvar)
-        
-        # Concatenate latent vector + year embedding for Decoder
-        z_dec_input = torch.cat([z, t_embed], dim=1)
-        x_recon = self.decoder(z_dec_input)
-        
+    def encode(self, x, year_idx, dc_bin):
+        t_embed = self.year_embedding(year_idx)
+        dc_embed = self.dc_embedding(dc_bin)
+        enc_input = torch.cat([x, t_embed, dc_embed], dim=1)
+        h = self.encoder(enc_input)
+        return self.fc_mu(h), self.fc_logvar(h)
+
+    def decode(self, z, year_idx, dc_bin):
+        t_embed = self.year_embedding(year_idx)
+        dc_embed = self.dc_embedding(dc_bin)
+        dec_input = torch.cat([z, t_embed, dc_embed], dim=1)
+        return self.decoder(dec_input)
+
+    def forward(self, x, year_idx, dc_bin):
+        mu, logvar = self.encode(x, year_idx, dc_bin)
+        z = self.reparameterize(mu, logvar) if self.training else mu
+        x_recon = self.decode(z, year_idx, dc_bin)
         return x_recon, mu, logvar
 ```
 
@@ -329,10 +361,12 @@ else:
 
 print(f"Using device: {device}")
 
-model = TimeEmbeddedTabularVAE(
+model = DCandYearConditionedVAE(
     input_dim=input_dim, 
     num_years=num_years, 
-    time_embed_dim=8, 
+    time_embed_dim=8,
+    dc_bins=8,
+    dc_embed_dim=4, 
     hidden_dim_1=128,
     hidden_dim_2=16, 
     latent_dim=8
@@ -350,12 +384,13 @@ for epoch in range(epochs):
     # --- Training Phase ---
     model.train()
     total_loss = 0.0
-    for x_batch, year_batch, _ in train_loader:
+    for x_batch, year_batch, dc_batch, _ in train_loader:
         x_batch = x_batch.to(device)
         year_batch = year_batch.to(device)
+        dc_batch = dc_batch.to(device)
         
         optimizer.zero_grad()
-        recon_batch, mu, logvar = model(x_batch, year_batch)
+        recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
         loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
         
         loss.backward()
@@ -371,11 +406,12 @@ for epoch in range(epochs):
     model.eval()
     total_test_loss = 0.0
     with torch.no_grad():
-        for x_batch, year_batch, _ in test_loader:
+        for x_batch, year_batch, dc_batch, _ in test_loader:
             x_batch = x_batch.to(device)
             year_batch = year_batch.to(device)
+            dc_batch = dc_batch.to(device)
             
-            recon_batch, mu, logvar = model(x_batch, year_batch)
+            recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
             test_loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
             total_test_loss += test_loss.item()
             
@@ -409,12 +445,12 @@ all_targets = []
 
 # Collect all test predictions and targets
 with torch.no_grad():
-    for x_batch, year_batch, _ in test_loader:
+    for x_batch, year_batch, dc_batch, _ in test_loader:
         x_batch = x_batch.to(device)
         year_batch = year_batch.to(device)
+        dc_batch = dc_batch.to(device)
         
-        recon_batch, _, _ = model(x_batch, year_batch)
-        
+        recon_batch, _, _ = model(x_batch, year_batch, dc_batch)
         all_recons.append(recon_batch.cpu().numpy())
         all_targets.append(x_batch.cpu().numpy())
 
@@ -449,12 +485,13 @@ latents = []
 eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
 
 with torch.no_grad():
-    for x_batch, year_batch, _ in eval_train_loader:  # Unpack 3 values
+    for x_batch, year_batch, dc_batch, _ in eval_train_loader:  # Unpack 3 values
         x_batch = x_batch.to(device)
         year_batch = year_batch.to(device)
+        dc_batch = dc_batch.to(device)
         
         # Extract mean vector (z_mu)
-        _, mu, _ = model(x_batch, year_batch)
+        _, mu, _ = model(x_batch, year_batch, dc_batch)
         latents.append(mu.cpu().numpy())
 
 # Convert to DataFrame
@@ -474,10 +511,10 @@ def get_latents_and_targets(loader):
     model.eval()
     Z, Y = [], []
     with torch.no_grad():
-        for x_b, year_b, y_b in loader:  # Unpack x, year, y
-            _, mu, _ = model(x_b.to(device), year_b.to(device))
+        for x_b, year_b, dc_b, y_b in loader:
+            _, mu, _ = model(x_b.to(device), year_b.to(device), dc_b.to(device))
             Z.append(mu.cpu().numpy())
-            Y.append(y_b.numpy())  # Collect aligned targets
+            Y.append(y_b.numpy()) 
             
     return np.vstack(Z), np.concatenate(Y)
 
