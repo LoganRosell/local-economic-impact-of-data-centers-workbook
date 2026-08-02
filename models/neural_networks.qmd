@@ -319,7 +319,7 @@ model = TimeEmbeddedTabularVAE(
     input_dim=input_dim, 
     num_years=num_years, 
     time_embed_dim=8, 
-    hidden_dim_1=64,
+    hidden_dim_1=128,
     hidden_dim_2=16, 
     latent_dim=8
 ).to(device)
@@ -382,4 +382,45 @@ plt.title("VAE Loss Over Time")
 plt.grid(True, linestyle="--", alpha=0.5)
 plt.legend()
 plt.show()
+```
+
+### Check the reconstruction error of specific features
+
+```{python}
+# Set model to evaluation mode
+model.eval()
+
+all_recons = []
+all_targets = []
+
+# Collect all test predictions and targets
+with torch.no_grad():
+    for x_batch, year_batch in test_loader:
+        x_batch = x_batch.to(device)
+        year_batch = year_batch.to(device)
+        
+        recon_batch, _, _ = model(x_batch, year_batch)
+        
+        all_recons.append(recon_batch.cpu().numpy())
+        all_targets.append(x_batch.cpu().numpy())
+
+# Stack predictions and actual values
+all_recons = np.vstack(all_recons)
+all_targets = np.vstack(all_targets)
+
+# Calculate MSE per feature (across all test samples)
+feature_mses = np.mean((all_recons - all_targets) ** 2, axis=0)
+
+# Create a DataFrame for easy sorting and plotting
+mse_df = pd.DataFrame({
+    "feature": feature_cols,
+    "mse": feature_mses
+}).sort_values("mse", ascending=False)
+
+# Display Top 10 Highest Loss Features (Hardest to reconstruct)
+print("--- Top 10 Hardest Features to Reconstruct ---")
+print(mse_df.head(10).to_string(index=False))
+
+print("\n--- Top 10 Easiest Features to Reconstruct ---")
+print(mse_df.tail(10).to_string(index=False))
 ```
