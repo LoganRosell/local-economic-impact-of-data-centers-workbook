@@ -818,3 +818,26 @@ def combine_dfs(base_df, dfs_to_join):
     print("Missing Summary: \n", missing_summary_table)
 
     return out_df
+
+def plot_model_residuals(residuals, fitted_values):
+    '''
+    residuals: numpy array of model's residuals values
+    fitted_values: numpy array of model's fitted values
+    '''
+    plt.figure(figsize=(8, 5))
+    plt.scatter(fitted_values, residuals, alpha=0.3, color="navy", edgecolors="none")
+    plt.axhline(0, color="red", linestyle="--", linewidth=1.5)
+    plt.xlabel("Fitted Values")
+    plt.ylabel("Residuals")
+    plt.title("Residuals vs. Fitted Values")
+    plt.grid(True, linestyle=":", alpha=0.6)
+    plt.show()
+
+    plt.figure(figsize=(8, 5))
+    sns.histplot(residuals, kde=True, color="navy", bins=50)
+    plt.axvline(0, color="red", linestyle="--")
+    plt.xlabel("Residual Value")
+    plt.ylabel("Frequency")
+    plt.title("Distribution of Model Residuals")
+    plt.grid(True, linestyle=":", alpha=0.6)
+    plt.show()
