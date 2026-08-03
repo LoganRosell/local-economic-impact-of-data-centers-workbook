@@ -41,8 +41,13 @@ cols = df.columns
 ```
 
 ```{python}
+# Limit to only years of analysis (2007-2022)
+df = df[(df["year"] > 2006) & (df["year"] < 2023)].reset_index(drop=True)
+```
+
+```{python}
 # Add logged version of estab counts to improve visualization
-df["estabs_log"] = np.log1p(df["estabs"])
+df.loc[:, "estabs_log"] = np.log1p(df["estabs"])
 ```
 
 ### Missingness
