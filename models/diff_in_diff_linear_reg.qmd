@@ -315,6 +315,8 @@ plt.ylabel('Principal Component 2')
 plt.title('PCA Projection of US Counties by Logged Datacenter Count')
 plt.colorbar(scatter, label='Logged Datacenter Count')
 plt.tight_layout()
+
+plt.savefig('pca_datacenter_plot.png', dpi=300, bbox_inches='tight')
 plt.show()
 ```
 
