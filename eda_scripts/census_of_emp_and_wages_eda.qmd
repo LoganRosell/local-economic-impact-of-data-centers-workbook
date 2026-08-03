@@ -40,6 +40,11 @@ df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df(
 cols = df.columns
 ```
 
+```{python}
+# Add logged version of estab counts to improve visualization
+df["estabs_log"] = np.log1p(df["estabs"])
+```
+
 ### Missingness
 ```{python}
 # return number and percentage of NA values in each column
@@ -60,9 +65,8 @@ print(df.describe().round(2))
 ### Statitical Distribution Plots
 
 ```{python}
-
 # Hisogram
-sns.histplot(data=df, x=df["estabs"])
+sns.histplot(data=df, x=df["estabs_log"])
 plt.show()
 ```
 
@@ -194,11 +198,11 @@ plot_county_coverage(df, "Busisness Patterns", "county coverage")
 
 # Update these:
 eda_table_name = "NAICS 518 Establishments"
-cols_to_use = [2]
+cols_to_use = ["estabs_log", "estabs_yoy_raw_diff"]
 
 ## one map per column
 for i in cols_to_use:
-    value_col = cols[i]
+    value_col = i
     map_df = df[["year", "county_id", value_col]].dropna()
 
     ## Get unique years
@@ -212,7 +216,7 @@ for i in cols_to_use:
 
     frames = []
     for year in years:
-        df_year = map_df[map_df["year"] == year] # dropped .copy() for speed
+        df_year = map_df[map_df["year"] == year]
         
         frames.append(
             go.Frame(
