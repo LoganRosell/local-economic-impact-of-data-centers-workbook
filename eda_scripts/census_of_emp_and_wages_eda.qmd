@@ -172,7 +172,7 @@ ax.annotate(
 
 ax.set_title("National total NAICS 518 establishments (2007–2022)", pad=15)
 ax.set(xlabel=None)
-ax.set_ylabel("NAICS 518 establishments")
+ax.set_ylabel("Establishments")
 
 years = clean_nat_total["year"].astype(int)
 ax.set_xticks(years)
@@ -193,7 +193,7 @@ ax.tick_params(axis = "both", which = "major", labelsize = 12)
 
 fig.tight_layout()
 
-plt.savefig("naics_518_establishments_trend.png", dpi=90, bbox_inches="tight")
+plt.savefig("../poster_plots/naics_518_establishments_trend.png", dpi=90, bbox_inches="tight")
 
 plt.show()
 ```
@@ -396,7 +396,7 @@ fig = go.Figure(
             marker_opacity=0.85,
             marker_line_width=0.1,
             marker_line_color = "white",
-            colorbar=dict(title="Log number<br>of<br>establishments", len = 0.75)
+            colorbar=dict(title="Log<br>establishments", len = 0.55, y = 0.5)
         )
     ]
 )
@@ -406,6 +406,9 @@ fig.update_layout(
         text=f"NAICS 518 Establishments by county (2022)",
         x=0.5,
         xanchor="center",
+        y=0.98,
+        yanchor="top",
+        pad=dict(t=0, b=0)
     ),
     geo=dict(
         scope="usa",
@@ -418,12 +421,14 @@ fig.update_layout(
         lonaxis=dict(range=[-125, -66]),
         lataxis=dict(range=[24, 50])
     ),
-    margin=dict(l=0, r=0, t=60, b=0),
+    margin=dict(l=0, r=0, t=10, b=0),
+    width=600,
+    height=360
 )
 
     
 ## Make it look nice
-fig.write_image("../poster_plots/map_dcs_2022.png", scale=3)
+fig.write_image("../poster_plots/map_dcs_2022.png", width=600, height=360, scale = 1)
 
 fig.show()
 ```
