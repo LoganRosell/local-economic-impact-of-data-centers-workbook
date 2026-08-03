@@ -1,0 +1,598 @@
+```{python}
+import importlib
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+import duckdb
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_numeric_dtype
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.preprocessing import StandardScaler
+from sqlalchemy import create_engine
+from imblearn.over_sampling import SMOTE
+import plotly.express as px
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+import torch.nn as nn
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.preprocessing import PowerTransformer
+
+import utils.db_cleaning_utils as dbu
+import utils.ml_modeling_utils as mlu
+
+# Reload custom utilities
+importlib.reload(dbu)
+importlib.reload(mlu)
+
+# Load environment & paths
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+### Loading and merging the data
+
+```{python}
+# Load data
+database_url = os.getenv("DUCKDB_DB_URL")
+
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
+
+dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+near_dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
+air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
+bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
+code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
+gdp_df = con.execute("SELECT * FROM my_db.transformed.gdp").df()
+inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
+pop_df = con.execute("SELECT * FROM my_db.population").df()
+perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
+emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
+county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
+```
+
+```{python}
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
+
+final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+
+final_bus_df = dbu.impute_all_columns_vectorized(final_bus_df)
+
+final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
+```
+
+```{python}
+# Create county_year dataframe for merging below
+county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_year_df["water_area_sqmi"]
+```
+
+```{python}
+near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landadj"].round()
+```
+
+```{python}
+# remove land and water areas from air_df to avoid col name conflict in merge step below
+air_df = air_df.drop(columns=["land_area_sqmi", "water_area_sqmi"])
+
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
+```
+
+```{python}
+# Make applicable columns per-capita
+bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
+
+cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
+
+per_capita_cols = [
+    "real_gdp_2017_dollars_thousands",
+    "real_gdp_2017_dollars_thousands_spatial_weighted_avg_5",
+    "personal_income_thousands_of_dollars",
+    "personal_income_thousands_of_dollars_spatial_weighted_avg_5",
+    "all_permits",
+    "all_permits_spatial_weighted_avg_5",
+    "single_family_permits",
+    "single_family_permits_spatial_weighted_avg_5",
+    "all_multifamily_permits",
+    "all_multifamily_permits_spatial_weighted_avg_5"
+] + cols
+
+final_df = mlu.make_per_capita(final_df, per_capita_cols)
+
+final_df["single_family_permits_per_1000"] = (
+    final_df["single_family_permits_per_capita"] * 1000
+)
+
+final_df["all_multifamily_permits_per_1000"] = (
+    final_df["all_multifamily_permits_per_capita"] * 1000
+)
+```
+
+```{python}
+
+# final_df["datacenters_per_capita"] = final_df["estabs"] / final_df["population"]
+# final_df["datacenters_spatial_per_capita"] = final_df["estabs_spatial_weighted_avg_5"] / final_df["population"]
+```
+
+```{python}
+# Rename for clarity
+final_df = final_df.rename(columns = {
+    "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
+    "estabs": "datacenters",
+    "estabs_per_100_sqmi": "datacenters_per_100_sqmi",
+    "nearby_estabs_50mi_landadj": "nearby_datacenters_50mi",
+    "nearby_estabs_50mi_per_100_sqmi": "nearby_datacenters_50mi_per_100_sqmi",
+    "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
+    "unemployment_rate": "unemployment_rate_pct"
+    })
+```
+
+```{python}
+summary_df = mlu.eda_summary(final_df, acceptable_skew = 2.0)
+summary_df
+```
+
+```{python}
+all_dc_cols = ["datacenters", "nearby_datacenters_50mi", "datacenters_per_100_sqmi", "nearby_datacenters_50mi_per_100_sqmi"]
+```
+
+```{python}
+final_df = mlu.apply_suggested_transforms(final_df, summary_df, cols_to_exclude = all_dc_cols)
+final_df
+```
+
+```{python}
+# Add column to county_df which indicates the presence of one or more data centers in a county
+final_df["has_datacenter"] = final_df["datacenters"] > 0
+```
+
+```{python}
+# created binned column to track 8 different sized of data center counts
+def get_dc_bin(count):
+    if count == 0:
+        return 0
+    elif count == 1:
+        return 1
+    elif count == 2:
+        return 2
+    elif count <= 5:
+        return 3
+    elif count <= 15:
+        return 4
+    elif count <= 50:
+        return 5
+    elif count <= 150:
+        return 6
+    else:
+        return 7  # Mega-clusters (>150)
+
+final_df["dc_bin"] = final_df["datacenters"].apply(get_dc_bin)
+```
+
+```{python}
+# drop non-numeric columns which are not helpful ids
+final_df = final_df.drop(columns=[
+    "state_fips_code",
+    "county_fips_code",
+    "county_ns_code",
+    "county_name",
+    "fips_class_code",
+    "functional_status",
+    "state"])
+```
+
+```{python}
+# Drop yoy change features which don't change over time
+final_df = final_df.drop(columns=[
+    "centroid_lon_yoy_change",
+    "centroid_lat_yoy_change",
+    "land_area_sqmi_yoy_change",
+    "water_area_sqmi_yoy_change"
+])
+```
+
+```{python}
+# Drop columns which don't seem helpful
+final_df = final_df.drop(columns=[
+    "water_area_sqmi",
+    "land_area_sqmi_log",
+    "pm25_pop_sd_log",
+    "pm25_pop_daily_avg",
+    "centroid_lon_spatial_weighted_avg_5",
+    "centroid_lat_spatial_weighted_avg_5",
+    "land_area_sqmi_spatial_weighted_avg_5_log",
+    "water_area_sqmi_spatial_weighted_avg_5_log",
+    "pm25_pop_sd_spatial_weighted_avg_5_log",
+    "pm25_pop_daily_avg_yoy_change",
+    "quantity_index_gdp_log",
+    "quantity_index_gdp_spatial_weighted_avg_5",
+    "quantity_index_gdp_yoy_change",
+    "contributing_counties_50mi",
+    "raw_overlap_sqmi_50mi_log",
+    "effective_land_overlap_sqmi_50mi"
+])
+```
+
+```{python}
+# drop features with any missing data
+cols_with_high_missingness =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["missing_share"] > 0].loc[:,"column"]
+
+cols_with_high_missingness = cols_with_high_missingness.to_list()
+
+final_df = final_df.drop(columns=cols_with_high_missingness)
+df = final_df
+```
+
+### Prepare data for VAE
+
+```{python}
+
+# Create year_idx mapping first
+unique_years = sorted(df["year"].unique())
+year_to_idx = {yr: i for i, yr in enumerate(unique_years)}
+df["year_idx"] = df["year"].map(year_to_idx)
+
+# Create spatial train/test split by county_id
+unique_counties = df["county_id"].unique()
+train_counties, test_counties = train_test_split(
+    unique_counties, test_size=0.20, random_state=42
+)
+
+train_mask = df["county_id"].isin(train_counties)
+test_mask = df["county_id"].isin(test_counties)
+
+train_df = df[train_mask].copy()
+test_df = df[test_mask].copy()
+
+# Exclude condition/target columns from features
+condition_cols = ["county_id", "year", "year_idx", "datacenters", "dc_bin", "has_datacenter"]
+feature_cols = [c for c in df.columns if c not in condition_cols]
+
+train_df["has_datacenter"] = train_df["has_datacenter"].astype(float)
+test_df["has_datacenter"] = test_df["has_datacenter"].astype(float)
+
+# Fit scaler on the training counties
+pt = PowerTransformer(method='yeo-johnson')
+X_train_scaled = pt.fit_transform(train_df[feature_cols])
+X_test_scaled = pt.transform(test_df[feature_cols])
+
+# Tensors & Loaders
+X_train_tensor = torch.tensor(X_train_scaled, dtype=torch.float32)
+year_train_tensor = torch.tensor(train_df["year_idx"].values, dtype=torch.long)
+
+X_test_tensor = torch.tensor(X_test_scaled, dtype=torch.float32)
+year_test_tensor = torch.tensor(test_df["year_idx"].values, dtype=torch.long)
+
+y_train_tensor = torch.tensor(train_df["has_datacenter"].values, dtype=torch.float32)
+y_test_tensor = torch.tensor(test_df["has_datacenter"].values, dtype=torch.float32)
+
+
+dc_train_tensor = torch.tensor(train_df["dc_bin"].values, dtype=torch.long)
+dc_test_tensor = torch.tensor(test_df["dc_bin"].values, dtype=torch.long)
+
+train_dataset = TensorDataset(X_train_tensor, year_train_tensor, dc_train_tensor, y_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, year_test_tensor, dc_test_tensor, y_test_tensor)
+
+train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+
+input_dim = X_train_tensor.shape[1]
+num_years = len(unique_years)
+```
+
+
+```{python}
+class DCandYearConditionedVAE(nn.Module):
+    def __init__(self, input_dim, num_years, time_embed_dim=8, dc_bins=8,dc_embed_dim=4, hidden_dim_1=32, hidden_dim_2=16, latent_dim=8):
+        super(DCandYearConditionedVAE, self).__init__()
+        
+        # Trainable Year Embedding
+        self.year_embedding = nn.Embedding(num_embeddings=num_years, embedding_dim=time_embed_dim)
+        self.dc_embedding = nn.Embedding(num_embeddings=dc_bins, embedding_dim=dc_embed_dim)
+        
+        cond_dim = time_embed_dim + dc_embed_dim
+        # Combined Input Dimension: Continuous Features + Year + DC
+        encoder_input_dim = input_dim + cond_dim
+        
+        # Encoder
+        self.encoder = nn.Sequential(
+            nn.Linear(encoder_input_dim, hidden_dim_1),
+            nn.BatchNorm1d(hidden_dim_1),
+            nn.ReLU(),
+            #nn.Dropout(p=0.1),
+
+            nn.Linear(hidden_dim_1, hidden_dim_2),
+            nn.BatchNorm1d(hidden_dim_2),
+            nn.ReLU(),
+            #nn.Dropout(p=0.1)
+        )
+        
+        # Latent Space (Mean & Log-Var)
+        self.fc_mu = nn.Linear(hidden_dim_2, latent_dim)
+        self.fc_logvar = nn.Linear(hidden_dim_2, latent_dim)
+        
+        # Decoder Input: Latent vector (z) + Year Embedding
+        decoder_input_dim = latent_dim + cond_dim
+
+        self.decoder = nn.Sequential(
+            nn.Linear(decoder_input_dim, hidden_dim_2),
+            nn.BatchNorm1d(hidden_dim_2),
+            nn.ReLU(),
+            #nn.Dropout(p=0.1),
+
+            nn.Linear(hidden_dim_2, hidden_dim_1),
+            nn.BatchNorm1d(hidden_dim_1),
+            nn.ReLU(),
+            #nn.Dropout(p=0.1),
+
+            nn.Linear(hidden_dim_1, input_dim) # Reconstructs continuous features
+        )
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def encode(self, x, year_idx, dc_bin):
+        t_embed = self.year_embedding(year_idx)
+        dc_embed = self.dc_embedding(dc_bin)
+        enc_input = torch.cat([x, t_embed, dc_embed], dim=1)
+        h = self.encoder(enc_input)
+        return self.fc_mu(h), self.fc_logvar(h)
+
+    def decode(self, z, year_idx, dc_bin):
+        t_embed = self.year_embedding(year_idx)
+        dc_embed = self.dc_embedding(dc_bin)
+        dec_input = torch.cat([z, t_embed, dc_embed], dim=1)
+        return self.decoder(dec_input)
+
+    def forward(self, x, year_idx, dc_bin):
+        mu, logvar = self.encode(x, year_idx, dc_bin)
+        z = self.reparameterize(mu, logvar) if self.training else mu
+        x_recon = self.decode(z, year_idx, dc_bin)
+        return x_recon, mu, logvar
+```
+
+
+```{python}
+def vae_loss_function(recon_x, x, mu, logvar, beta=0.01):
+    recon_loss = nn.functional.mse_loss(recon_x, x, reduction='sum')
+    kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return recon_loss + beta * kl_loss
+
+# Check for CUDA (NVIDIA), MPS (Apple Silicon), or fall back to CPU
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+
+print(f"Using device: {device}")
+
+model = DCandYearConditionedVAE(
+    input_dim=input_dim, 
+    num_years=num_years, 
+    time_embed_dim=8,
+    dc_bins=8,
+    dc_embed_dim=4, 
+    hidden_dim_1=128,
+    hidden_dim_2=16, 
+    latent_dim=8
+).to(device)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+# Initialize list to store loss per epoch
+loss_history = []
+test_loss_history = []
+
+# Training Loop
+epochs = 50
+for epoch in range(epochs):
+    # --- Training Phase ---
+    model.train()
+    total_loss = 0.0
+    for x_batch, year_batch, dc_batch, _ in train_loader:
+        x_batch = x_batch.to(device)
+        year_batch = year_batch.to(device)
+        dc_batch = dc_batch.to(device)
+        
+        optimizer.zero_grad()
+        recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
+        loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
+        
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        
+        total_loss += loss.item()
+        
+    avg_epoch_loss = total_loss / len(train_loader.dataset)
+    loss_history.append(avg_epoch_loss)
+    
+    # --- Testing Phase ---
+    model.eval()
+    total_test_loss = 0.0
+    with torch.no_grad():
+        for x_batch, year_batch, dc_batch, _ in test_loader:
+            x_batch = x_batch.to(device)
+            year_batch = year_batch.to(device)
+            dc_batch = dc_batch.to(device)
+            
+            recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
+            test_loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
+            total_test_loss += test_loss.item()
+            
+    avg_test_loss = total_test_loss / len(test_loader.dataset)
+    test_loss_history.append(avg_test_loss)
+    
+    if (epoch + 1) % 10 == 0:
+        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_epoch_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
+```
+
+```{python}
+plt.figure(figsize=(8, 4))
+plt.plot(range(1, epochs + 1), loss_history, label="Training Loss")
+plt.plot(range(1, epochs + 1), test_loss_history, label="Testing Loss", linestyle="--")
+plt.xlabel("Epoch")
+plt.ylabel("Loss per Sample")
+plt.title("VAE Loss Over Time")
+plt.grid(True, linestyle="--", alpha=0.5)
+plt.legend()
+plt.show()
+```
+
+### Check the reconstruction error of specific features
+
+```{python}
+# Set model to evaluation mode
+model.eval()
+
+all_recons = []
+all_targets = []
+
+# Collect all test predictions and targets
+with torch.no_grad():
+    for x_batch, year_batch, dc_batch, _ in test_loader:
+        x_batch = x_batch.to(device)
+        year_batch = year_batch.to(device)
+        dc_batch = dc_batch.to(device)
+        
+        recon_batch, _, _ = model(x_batch, year_batch, dc_batch)
+        all_recons.append(recon_batch.cpu().numpy())
+        all_targets.append(x_batch.cpu().numpy())
+
+# Stack predictions and actual values
+all_recons = np.vstack(all_recons)
+all_targets = np.vstack(all_targets)
+
+# Calculate MSE per feature (across all test samples)
+feature_mses = np.mean((all_recons - all_targets) ** 2, axis=0)
+
+# Create a DataFrame for easy sorting and plotting
+mse_df = pd.DataFrame({
+    "feature": feature_cols,
+    "mse": feature_mses
+}).sort_values("mse", ascending=False)
+
+# Display Top 10 Highest Loss Features (Hardest to reconstruct)
+print("--- Top 10 Hardest Features to Reconstruct ---")
+print(mse_df.head(10).to_string(index=False))
+
+print("\n--- Top 10 Easiest Features to Reconstruct ---")
+print(mse_df.tail(10).to_string(index=False))
+```
+
+
+### Extract Latent Space Features
+```{python}
+model.eval()
+
+latents = []
+
+eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
+
+with torch.no_grad():
+    for x_batch, year_batch, dc_batch, _ in eval_train_loader:  # Unpack 3 values
+        x_batch = x_batch.to(device)
+        year_batch = year_batch.to(device)
+        dc_batch = dc_batch.to(device)
+        
+        # Extract mean vector (z_mu)
+        _, mu, _ = model(x_batch, year_batch, dc_batch)
+        latents.append(mu.cpu().numpy())
+
+# Convert to DataFrame
+latent_cols = [f"z_{i}" for i in range(latents[0].shape[1])]
+z_df = pd.DataFrame(np.vstack(latents), columns=latent_cols)
+```
+
+
+```{python}
+
+# Create non-shuffled evaluation DataLoaders
+eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
+eval_test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+
+# Updated extraction function pulling Z and Y together
+def get_latents_and_targets(loader):
+    model.eval()
+    Z, Y = [], []
+    with torch.no_grad():
+        for x_b, year_b, dc_b, y_b in loader:
+            _, mu, _ = model(x_b.to(device), year_b.to(device), dc_b.to(device))
+            Z.append(mu.cpu().numpy())
+            Y.append(y_b.numpy()) 
+            
+    return np.vstack(Z), np.concatenate(Y)
+
+# Extract aligned representations and targets
+Z_train, y_train = get_latents_and_targets(eval_train_loader)
+Z_test, y_test = get_latents_and_targets(eval_test_loader)
+
+# Train balanced Logistic Regression
+clf = LogisticRegression(class_weight="balanced", max_iter=1000)
+clf.fit(Z_train, y_train)
+
+preds = clf.predict_proba(Z_test)[:, 1]
+print(f"Test ROC-AUC using ONLY 8 Latent Dimensions: {roc_auc_score(y_test, preds):.4f}")
+
+# Custom accuracy report
+mlu.model_accuracy_report(clf, Z_train, y_train, Z_test, y_test)
+```
+
+### Test the differnce in predictions when increaseing DC bin by one
+
+```{python}
+model.eval()
+
+x_real, year_real, dc_bin_real, _ = next(iter(eval_test_loader))
+x_real = x_real.to(device)
+year_real = year_real.to(device)
+dc_bin_real = dc_bin_real.to(device)
+
+with torch.no_grad():
+    # Encode county into intrinsic z using baseline bin
+    mu_z, _ = model.encode(x_real, year_real, dc_bin_real)
+    
+    # Reconstruct baseline features
+    x_baseline_recon = model.decode(mu_z, year_real, dc_bin_real)
+    
+    # Step up datacenter bin by +1
+    dc_bin_cf = torch.clamp(dc_bin_real + 1, max=7)
+    
+    # Decode using modified condition vector
+    x_cf_recon = model.decode(mu_z, year_real, dc_bin_cf)
+
+# Transform predictions to original units
+baseline_features = pt.inverse_transform(x_baseline_recon.cpu().numpy())
+cf_features = pt.inverse_transform(x_cf_recon.cpu().numpy())
+
+# Measure predicted economic impact
+impact_df = pd.DataFrame(cf_features - baseline_features, columns=feature_cols)
+# Filter out counties that are already in the highest bin (Bin 7)
+non_max_mask = (dc_bin_real < 7).cpu().numpy()
+
+# Calculate impact only for counties that actually received an intervention
+valid_impact_df = impact_df[non_max_mask]
+
+print("--- Top Predicted Economic Impacts (+1 DC Tier) for Non-Max Counties ---")
+print(valid_impact_df.mean().sort_values(ascending=False).head(10))
+```

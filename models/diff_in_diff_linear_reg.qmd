@@ -1,0 +1,490 @@
+```{python}
+import importlib
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+import duckdb
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_numeric_dtype
+from sklearn.metrics import accuracy_score
+from sqlalchemy import create_engine
+import plotly.express as px
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import seaborn as sns
+import pyfixest as pf
+from diff_diff import CallawaySantAnna
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.decomposition import PCA
+
+import utils.db_cleaning_utils as dbu
+import utils.ml_modeling_utils as mlu
+
+# Reload custom utilities
+importlib.reload(dbu)
+importlib.reload(mlu)
+
+# Load environment & paths
+load_dotenv()
+data_dir = Path(os.environ["DATA_DIR"])
+```
+
+```{python}
+# setup connection variables to local sql db
+database_url = os.getenv("DATABASE_URL")
+engine = create_engine(database_url)
+```
+
+### Loading and merging the data
+
+```{python}
+# Load data
+database_url = os.getenv("DUCKDB_DB_URL")
+
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
+
+dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+near_dc_df = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
+air_df = con.execute("SELECT * FROM my_db.transformed.air_quality").df()
+bus_df = con.execute("SELECT * FROM my_db.transformed.business_patterns").df()
+code_df = con.execute("SELECT * FROM my_db.naics_code_look_up").df()
+gdp_df = con.execute("SELECT * FROM my_db.transformed.gdp").df()
+inc_df = con.execute("SELECT * FROM my_db.transformed.personal_income").df()
+pop_df = con.execute("SELECT * FROM my_db.population").df()
+perm_df = con.execute("SELECT * FROM my_db.transformed.res_construction_permits").df()
+emp_df = con.execute("SELECT * FROM my_db.transformed.unemployment").df()
+county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").df()
+```
+
+
+### Create final table
+
+```{python}
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2006, year_end=2022)
+
+pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
+
+final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, on=["county_id", "year"], how="left")
+
+final_bus_df = dbu.impute_all_columns_vectorized(final_bus_df)
+
+final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
+
+final_bus_df = final_bus_df[final_bus_df["year"] != 2006] #drop 2006, it was only used to cacluated 2007's YoY change
+```
+
+```{python}
+# Create county_year dataframe for merging below
+county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+
+county_year_df = county_year_df[["county_id", "year", "land_area_sqmi", "water_area_sqmi"]]
+
+county_year_df["total_area_sqmi"] = county_year_df["land_area_sqmi"] + county_year_df["water_area_sqmi"]
+```
+
+```{python}
+near_dc_df["nearby_estabs_50mi_landadj"] = near_dc_df["nearby_estabs_50mi_landadj"].round()
+```
+
+```{python}
+# remove land and water areas from air_df to avoid col name conflict in merge step below
+air_df = air_df.drop(columns=["land_area_sqmi", "water_area_sqmi"])
+
+final_df = mlu.combine_dfs(county_year_df, [air_df, final_bus_df, gdp_df, inc_df, pop_df, perm_df, emp_df, dc_df, near_dc_df])
+```
+
+### Clean up final table
+
+```{python}
+# Make applicable columns per-capita
+bus_cols = ["tot_employee_count", "annual_payroll", "tot_establishment_count"]
+
+cols = [c for c in final_df.columns if any(l in c for l in bus_cols)]
+
+per_capita_cols = [
+    "real_gdp_2017_dollars_thousands",
+    "real_gdp_2017_dollars_thousands_spatial_weighted_avg_5",
+    "personal_income_thousands_of_dollars",
+    "personal_income_thousands_of_dollars_spatial_weighted_avg_5",
+    "all_permits",
+    "all_permits_spatial_weighted_avg_5",
+    "single_family_permits",
+    "single_family_permits_spatial_weighted_avg_5",
+    "all_multifamily_permits",
+    "all_multifamily_permits_spatial_weighted_avg_5"
+] + cols
+
+final_df = mlu.make_per_capita(final_df, per_capita_cols)
+
+final_df["single_family_permits_per_1000"] = (
+    final_df["single_family_permits_per_capita"] * 1000
+)
+
+final_df["all_multifamily_permits_per_1000"] = (
+    final_df["all_multifamily_permits_per_capita"] * 1000
+)
+```
+
+
+```{python}
+# Rename for clarity
+final_df = final_df.rename(columns = {
+    "annual_payroll_per_capita": "annual_payroll_thousands_per_capita", 
+    "estabs": "datacenters",
+    "estabs_per_100_sqmi": "datacenters_per_100_sqmi",
+    "nearby_estabs_50mi_landadj": "nearby_datacenters_50mi",
+    "nearby_estabs_50mi_per_100_sqmi": "nearby_datacenters_50mi_per_100_sqmi",
+    "estabs_spatial_weighted_avg_5": "datacenters_spatial_weighted_avg_5",
+    "unemployment_rate": "unemployment_rate_pct"
+    })
+```
+
+```{python}
+# Drop redundant air quality features
+final_df = final_df.drop(columns=[
+    "pm25_max_sd",
+    "pm25_med_sd",
+    "pm25_max_daily_avg",
+    "pm25_med_daily_avg",
+    "pm25_pop_sd",
+    "pm25_pop_daily_avg",
+    "pm25_max_sd_spatial_weighted_avg_5",
+    "pm25_med_sd_spatial_weighted_avg_5",
+    "pm25_pop_sd_spatial_weighted_avg_5",
+    "pm25_max_daily_avg_spatial_weighted_avg_5",
+    "pm25_med_daily_avg_spatial_weighted_avg_5",
+    "pm25_pop_daily_avg_spatial_weighted_avg_5",
+    "pm25_max_sd_yoy_change",
+    "pm25_med_sd_yoy_change",
+    "pm25_pop_sd_yoy_change",
+    "pm25_max_daily_avg_yoy_change",
+    "pm25_med_daily_avg_yoy_change",
+    "pm25_pop_daily_avg_yoy_change"])
+```
+
+```{python}
+# Drop yoy change features which don't change over time
+final_df = final_df.drop(columns=[
+    "centroid_lon_yoy_change",
+    "centroid_lat_yoy_change",
+    "land_area_sqmi_yoy_change",
+    "water_area_sqmi_yoy_change"
+])
+```
+
+```{python}
+# Drop redundant GDP features
+final_df = final_df.drop(columns=[
+    "current_gdp_dollars_thousands",
+    "quantity_index_gdp",
+    "current_gdp_dollars_thousands_spatial_weighted_avg_5",
+    "quantity_index_gdp_spatial_weighted_avg_5"
+])
+```
+
+```{python}
+# Drop centroid data to encourage models to focus on economic factors rather than where a county is
+final_df = final_df.drop(columns=[
+    "centroid_lon",
+    "centroid_lat",
+    "centroid_lon_spatial_weighted_avg_5",
+    "centroid_lat_spatial_weighted_avg_5"
+])
+```
+
+```{python}
+summary_df = mlu.eda_summary(final_df, acceptable_skew = 2.0)
+summary_df
+```
+
+```{python}
+all_dc_cols = ["datacenters", "nearby_datacenters_50mi", "datacenters_per_100_sqmi", "nearby_datacenters_50mi_per_100_sqmi"]
+```
+
+```{python}
+final_df = mlu.apply_suggested_transforms(final_df, summary_df, cols_to_exclude = all_dc_cols)
+final_df
+```
+
+```{python}
+# drop non-numeric columns which are not helpful ids
+final_df = final_df.drop(columns=[
+    "state_fips_code",
+    "county_fips_code",
+    "county_ns_code",
+    "county_name",
+    "fips_class_code",
+    "functional_status",
+    "state"])
+```
+
+
+```{python}
+# drop features with any missing data
+cols_with_high_missingness =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["missing_share"] > 0].loc[:,"column"]
+
+cols_with_high_missingness = cols_with_high_missingness.to_list()
+
+final_df = final_df.drop(columns=cols_with_high_missingness)
+```
+
+### Drop columns which don't meet LINE assumptions
+```{python}
+# drop features with high skew (proxy for normality)
+# skewed_cols =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["skew"] > 2].loc[:,"column"]
+
+# skewed_cols = skewed_cols.to_list()
+# if "datacenters" in skewed_cols:
+#     skewed_cols.remove("datacenters")
+
+# final_df = final_df.drop(columns=skewed_cols)
+```
+
+```{python}
+# Drop redundant variables 
+final_df = final_df.drop(columns=[
+    "total_area_sqmi_log",
+    "employed_log",
+    "unemployed_log",
+    "employed_spatial_weighted_avg_5_log",
+    "employed_spatial_weighted_avg_5_log",
+    "employed_yoy_change_log1p",
+    "unemployed_yoy_change_log1p",
+    "contributing_counties_50mi",
+    "raw_overlap_sqmi_50mi_log",
+    "effective_land_overlap_sqmi_50mi",
+    "per_capita_personal_income_dollars_log",
+    "civilian_labor_force_log",
+    "per_capita_personal_income_dollars_spatial_weighted_avg_5",
+    "unemployed_spatial_weighted_avg_5_log",
+    "personal_income_thousands_of_dollars_yoy_change"
+], errors="ignore")
+```
+
+### K-Means Clustering
+```{python}
+final_df["has_datacenter"] = final_df["datacenters"] > 0
+y = final_df['has_datacenter']
+
+cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter"] 
+X = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
+
+X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42)
+
+qt = QuantileTransformer(output_distribution='normal', random_state=42)
+X_train = qt.fit_transform(X_train_raw)
+X_test = qt.transform(X_test_raw)
+
+pca = PCA(n_components=0.85, random_state=42)
+X_train = pca.fit_transform(X_train)
+X_test = pca.transform(X_test)
+```
+
+```{python}
+# check performance of clustering model 
+scores = {}
+for k in range(2, 10, 2):
+    km = KMeans(n_clusters=k, init='k-means++', n_init=10, random_state=42)
+    labels = km.fit_predict(X_train)
+    scores[k] = silhouette_score(X_train, labels)
+
+# Plot scores
+plt.figure(figsize=(8, 4))
+plt.plot(list(scores.keys()), list(scores.values()), marker='o')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('Silhouette Score')
+plt.title('Silhouette Score vs. k')
+plt.show()
+```
+
+Higher Silhouette scores indicate better separate bewetween clusters and thus better performance. Score ranges from -1 to 1
+
+```{python}
+# choose number of cluters to use
+n_clusters=2
+```
+
+```{python}
+kmeans = KMeans(n_clusters, init='k-means++', max_iter=300, n_init=10, random_state=42)
+
+kmeans.fit(X_train)
+
+cluster_labels = kmeans.predict(X_train)
+
+```
+
+```{python}
+# Check which featurs are contributing most to cluster separation
+X_train_df = pd.DataFrame(X_train, columns=X.columns)
+X_train_df['Cluster'] = cluster_labels
+
+# Calculate cluster means
+cluster_means = X_train_df.groupby('Cluster').mean()
+
+# Plot heatmap with  feature names
+plt.figure(figsize=(12, 10))
+sns.heatmap(
+    cluster_means.T, 
+    cmap='coolwarm', 
+    annot=True, 
+    fmt='.2f'
+)
+
+plt.title('Cluster Profiles by Feature Means')
+plt.xlabel('Cluster ID')
+plt.ylabel('Features')
+plt.tight_layout()
+plt.show()
+
+silhouette_avg_train_data = silhouette_score(X_train, cluster_labels)
+print(f'Train Data Silhouette Score: {silhouette_avg_train_data:.2f}')
+
+test_cluster_labels = kmeans.predict(X_test)
+silhouette_avg_test = silhouette_score(X_test, test_cluster_labels)
+print(f'Test Data Silhouette Score: {silhouette_avg_test:.2f}')
+```
+
+```{python}
+# save cluster lables to data frame for later use
+train_clusters = kmeans.predict(X_train)
+test_clusters = kmeans.predict(X_test)
+
+kmeans_labled_df = final_df.copy()
+
+kmeans_labled_df.loc[y_train.index, 'cluster_label'] = train_clusters
+kmeans_labled_df.loc[y_test.index, 'cluster_label'] = test_clusters
+
+kmeans_labled_df['cluster_label'] = kmeans_labled_df['cluster_label'].astype(int)
+```
+
+
+### Add Treatment Flag
+
+```{python}
+# create columns to track if and when a county got its first dc
+first_treated = (
+    final_df[final_df["datacenters"] > 2]
+    .groupby("county_id")["year"]
+    .min()
+    .reset_index()
+    .rename(columns={"year": "first_dc_year"})
+)
+
+final_df = final_df.merge(first_treated, on="county_id", how="left")
+final_df["first_dc_year"] = final_df["first_dc_year"].fillna(0).astype(int)
+
+final_df["treated"] = (
+    (final_df["first_dc_year"] > 0)
+    & (final_df["year"] >= final_df["first_dc_year"])
+).astype(int)
+
+# Create relative time variable: t - first_dc_year (e.g., -2, -1, 0, 1, 2)
+# Set never-treated (first_dc_year == 0) relative time to -100
+final_df["rel_year"] = final_df.apply(
+    lambda x: x["year"] - x["first_dc_year"] if x["first_dc_year"] > 0 else -100,
+    axis=1,
+)
+
+final_df = final_df.merge(
+    kmeans_labled_df[["county_id", "year", "cluster_label"]],
+    on=["county_id", "year"],
+    how="left",
+)
+```
+
+```{python}
+# split dataset into only cluster 0 obersvations and only cluster 1 observations
+cluster_0_df = final_df[final_df["cluster_label"] == 0]
+cluster_1_df = final_df[final_df["cluster_label"] == 1]
+```
+
+#### Testing the effect adding the first DC to a county over time on personal income
+
+```{python}
+
+cs = CallawaySantAnna(
+    control_group="never_treated",  
+    estimation_method="reg",
+    allow_unbalanced_panel=True
+)
+
+results = cs.fit(
+    data=cluster_0_df,
+    outcome="personal_income_thousands_of_dollars_per_capita_log",
+    unit="county_id",
+    time="year",
+    first_treat="first_dc_year",
+    covariates=[],
+    aggregate="all"
+)
+es_df = (
+    pd.DataFrame.from_dict(results.event_study_effects, orient="index")
+    .sort_index()
+    .loc[-5:5]
+)
+es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
+es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
+
+mlu.DiD_coeff_plot(es_df, "Log Personal Income per Capita")
+
+results = cs.fit(
+    data=cluster_1_df,
+    outcome="personal_income_thousands_of_dollars_per_capita_log",
+    unit="county_id",
+    time="year",
+    first_treat="first_dc_year",
+    covariates=[],
+    aggregate="all"
+)
+es_df = (
+    pd.DataFrame.from_dict(results.event_study_effects, orient="index")
+    .sort_index()
+    .loc[-5:5]
+)
+es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
+es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
+
+mlu.DiD_coeff_plot(es_df, "Log Personal Income per Capita")
+```
+
+
+```{python}
+outcomes = [
+    "unemployment_rate_pct",
+    "personal_income_thousands_of_dollars_per_capita_log",
+    "single_family_permits_per_1000_log1p",
+    "real_gdp_2017_dollars_thousands_per_capita_log",
+    "pm25_mean_daily_avg",
+    "pm25_mean_daily_avg_spatial_weighted_avg_5",
+    "annual_payroll_industrial_per_capita_log1p",
+    "annual_payroll_professional_per_capita_log1p",
+    "annual_payroll_public_services_per_capita_log1p",
+    "annual_payroll_trade_transport_per_capita_log1p",
+    "population_log",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "tot_employee_count_information_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_professional_per_capita_log1p",
+    "tot_employee_count_public_services_per_capita_log1p",
+    "tot_employee_count_trade_transport_per_capita_log1p"
+
+]
+
+for i in outcomes:
+    results, es_df = mlu.create_DiD_model(cluster_0_df, i)
+    mlu.DiD_coeff_plot(es_df, i)
+    results, es_df = mlu.create_DiD_model(cluster_1_df, i)
+    mlu.DiD_coeff_plot(es_df, i)
+
+```

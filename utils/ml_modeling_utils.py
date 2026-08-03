@@ -13,6 +13,7 @@ import statsmodels.formula.api as smf
 from scipy.stats import probplot
 import statsmodels.api as sm 
 import linearmodels as lm
+from diff_diff import CallawaySantAnna
 
 # slice df to specific year
 def return_specific_year(df, year):
@@ -818,3 +819,86 @@ def combine_dfs(base_df, dfs_to_join):
     print("Missing Summary: \n", missing_summary_table)
 
     return out_df
+
+def plot_model_residuals(residuals, fitted_values):
+    '''
+    residuals: numpy array of model's residuals values
+    fitted_values: numpy array of model's fitted values
+    '''
+    plt.figure(figsize=(8, 5))
+    plt.scatter(fitted_values, residuals, alpha=0.3, color="navy", edgecolors="none")
+    plt.axhline(0, color="red", linestyle="--", linewidth=1.5)
+    plt.xlabel("Fitted Values")
+    plt.ylabel("Residuals")
+    plt.title("Residuals vs. Fitted Values")
+    plt.grid(True, linestyle=":", alpha=0.6)
+    plt.show()
+
+    plt.figure(figsize=(8, 5))
+    sns.histplot(residuals, kde=True, color="navy", bins=50)
+    plt.axvline(0, color="red", linestyle="--")
+    plt.xlabel("Residual Value")
+    plt.ylabel("Frequency")
+    plt.title("Distribution of Model Residuals")
+    plt.grid(True, linestyle=":", alpha=0.6)
+    plt.show()
+
+
+def create_DiD_model(df, y_var):
+    cs = CallawaySantAnna(
+    control_group="never_treated",  
+    estimation_method="reg",
+    allow_unbalanced_panel=True
+    )
+
+    results = cs.fit(
+        data=df,
+        outcome=y_var,
+        unit="county_id",
+        time="year",
+        first_treat="first_dc_year",
+        covariates=[],
+        aggregate="all"
+    )
+
+    es_df = (
+        pd.DataFrame.from_dict(results.event_study_effects, orient="index")
+        .sort_index()
+        .loc[-5:5]
+    )
+    es_df["ci_lower"] = es_df["conf_int"].apply(lambda x: x[0])
+    es_df["ci_upper"] = es_df["conf_int"].apply(lambda x: x[1])
+
+    return results, es_df
+
+
+
+def DiD_coeff_plot(es_df, y_var):
+    plt.figure(figsize=(9, 5))
+
+    plt.errorbar(
+        x=es_df.index,
+        y=es_df["effect"],
+        yerr=[es_df["effect"] - es_df["ci_lower"], es_df["ci_upper"] - es_df["effect"]],
+        fmt="o",
+        color="#1f77b4",
+        ecolor="#1f77b4",
+        elinewidth=1.5,
+        capsize=4,
+        capthick=1.5,
+        label="ATT Estimate (95% CI)",
+    )
+
+    plt.plot(es_df.index, es_df["effect"], color="#1f77b4", linestyle="--", alpha=0.7)
+    plt.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.7)
+
+    plt.title(f"Event Study: Data Center Impact on {y_var}", fontsize=13, fontweight="bold", pad=12)
+    plt.xlabel("Relative Year to Data Center Addition", fontsize=11)
+    plt.ylabel(f"Difference in {y_var}", fontsize=11)
+    plt.xticks(es_df.index)
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.legend(frameon=True, loc="best")
+
+    plt.tight_layout()
+    plt.grid(False)
+    plt.show()

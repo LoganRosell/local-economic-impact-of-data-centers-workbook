@@ -173,7 +173,7 @@ def yoy_change(df, key_cols=None, include_cols=None):
 
         prev = grouped[col].shift(1)
 
-        df.loc[prev==0, change_col] = np.nan
+        df.loc[prev==0, change_col] = 0
 
     return df
 
@@ -347,6 +347,35 @@ def impute_all_columns_for_county(group):
         group[col] = vals_interp
 
     return group
+
+def impute_all_columns_vectorized(df, county_col="county_id", year_col="year"):
+    """
+    Vectorized imputation across all counties simultaneously:
+    - Sorts once by county and year
+    - Linear interpolation within each county group
+    - Leading NaNs -> 0
+    - Trailing NaNs -> 0
+    """
+    df = df.sort_values([county_col, year_col]).reset_index(drop=True)
+    
+    # Identify value columns to impute
+    cols = [c for c in df.columns if c not in [county_col, year_col]]
+    
+    # Grouped linear interpolation for internal gaps
+    df[cols] = df.groupby(county_col)[cols].transform(
+        lambda g: g.interpolate(method="linear", limit_area="inside")
+    )
+    
+    # Fill leading NaNs with 0
+    df[cols] = df[cols].fillna(0)
+    
+    # Round count-like columns
+    count_pattern = "count|establishment|employee"
+    count_cols = [c for c in cols if pd.Series(c).str.contains(count_pattern, regex=True).any()]
+    if count_cols:
+        df[count_cols] = df[count_cols].round()
+
+    return df
 
 def va_cities_to_parent_county(df):
     # convert fips codes for VA independent city to be parent county_id
