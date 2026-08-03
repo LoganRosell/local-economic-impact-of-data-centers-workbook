@@ -38,6 +38,7 @@ con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
 ```{python}
 # Load data
 df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+df_nearby = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
 cols = df.columns
 ```
 
@@ -55,6 +56,11 @@ df.loc[:, "estabs_log"] = np.log1p(df["estabs"])
 ```{python}
 # return number and percentage of NA values in each column
 print(skim(df))
+```
+
+
+```{python}
+print(skim(df_nearby))
 ```
 
 ```{python}
@@ -76,6 +82,10 @@ sns.histplot(data=df, x=df["estabs_log"])
 plt.show()
 ```
 
+```{python}
+sns.histplot(data=df_nearby[df_nearby["year"] == 2022], x = df_nearby[df_nearby["year"] == 2022]["nearby_estabs_50mi_landadj"])
+plt.show()
+```
 ### Checking Intra-Data-Source Correlation
 
 ```{python}
@@ -99,7 +109,7 @@ clean_nat_total = national_total_by_year[(national_total_by_year["year"] > 2006)
 
 sns.set_theme(style = "whitegrid", context = "talk")
 
-fig, ax = plt.subplots(figsize = (12, 4))
+fig, ax = plt.subplots(figsize = (8, 4))
 
 sns.lineplot(
     data = clean_nat_total,
@@ -162,7 +172,7 @@ ax.annotate(
 
 ax.set_title("National total NAICS 518 establishments (2007–2022)", pad=15)
 ax.set(xlabel=None)
-ax.set_ylabel("NAICS 518 establishments")
+ax.set_ylabel("Establishments")
 
 years = clean_nat_total["year"].astype(int)
 ax.set_xticks(years)
@@ -183,7 +193,7 @@ ax.tick_params(axis = "both", which = "major", labelsize = 12)
 
 fig.tight_layout()
 
-plt.savefig("naics_518_establishments_trend.png", dpi=90, bbox_inches="tight")
+plt.savefig("../poster_plots/naics_518_establishments_trend.png", dpi=90, bbox_inches="tight")
 
 plt.show()
 ```
@@ -360,6 +370,67 @@ for i in cols_to_use:
     fig = mu.apply_map_layout_and_controls(fig, title_text, years)
 
     fig.show()
+```
+
+#### Clean Version
+
+```{python}
+value_col = "estabs_log"
+
+map_df = df[["year", "county_id", value_col]].dropna()
+df_2022 = map_df[map_df["year"] == 2022]
+
+value_min = df_2022[value_col].min()
+value_max = df_2022[value_col].max()
+
+fig = go.Figure(
+    data=[
+        go.Choropleth(
+            geojson=counties_geojson, 
+            locations=df_2022["county_id"],
+            z=df_2022[value_col],
+            featureidkey="id",
+            colorscale="Viridis",
+            zmin=value_min,
+            zmax=value_max,
+            marker_opacity=0.85,
+            marker_line_width=0.1,
+            marker_line_color = "white",
+            colorbar=dict(title="Log<br>establishments", len = 0.55, y = 0.5)
+        )
+    ]
+)
+
+fig.update_layout(
+    title=dict(
+        text=f"NAICS 518 Establishments by county (2022)",
+        x=0.5,
+        xanchor="center",
+        y=0.98,
+        yanchor="top",
+        pad=dict(t=0, b=0)
+    ),
+    geo=dict(
+        scope="usa",
+        projection_type="albers usa",
+        showland=True,
+        landcolor="rgb(248, 248, 248)",
+        showcountries=False,
+        showlakes=False,
+        bgcolor="rgba(0,0,0,0)",
+        lonaxis=dict(range=[-125, -66]),
+        lataxis=dict(range=[24, 50])
+    ),
+    margin=dict(l=0, r=0, t=10, b=0),
+    width=600,
+    height=360
+)
+
+    
+## Make it look nice
+fig.write_image("../poster_plots/map_dcs_2022.png", width=600, height=360, scale = 1)
+
+fig.show()
 ```
 
 ### Map total change in data center count over analysis period

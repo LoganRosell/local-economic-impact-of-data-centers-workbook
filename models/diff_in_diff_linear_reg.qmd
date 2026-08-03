@@ -439,6 +439,32 @@ final_df = final_df.merge(
 ```
 
 ```{python}
+# create columns to track if and when a county got its first dc
+first_treated_nearby = (
+    final_df[final_df["nearby_datacenters_50mi"] > 112] # Median
+    .groupby("county_id")["year"]
+    .min()
+    .reset_index()
+    .rename(columns={"year": "above_val_nearby_year"})
+)
+
+final_df = final_df.merge(first_treated_nearby, on="county_id", how="left")
+final_df["above_val_nearby_year"] = final_df["above_val_nearby_year"].fillna(0).astype(int)
+
+final_df["treated_nearby"] = (
+    (final_df["above_val_nearby_year"] > 0)
+    & (final_df["year"] >= final_df["above_val_nearby_year"])
+).astype(int)
+
+# Create relative time variable: t - first_dc_year (e.g., -2, -1, 0, 1, 2)
+# Set never-treated (first_dc_year == 0) relative time to -100
+final_df["rel_year_nearby"] = final_df.apply(
+    lambda x: x["year"] - x["above_val_nearby_year"] if x["above_val_nearby_year"] > 0 else -100,
+    axis=1,
+)
+```
+
+```{python}
 # split dataset into only cluster 0 obersvations and only cluster 1 observations
 cluster_0_df = final_df[final_df["cluster_label"] == 0]
 cluster_1_df = final_df[final_df["cluster_label"] == 1]
@@ -606,5 +632,9 @@ for i in outcomes:
     mlu.DiD_coeff_plot(es_df, i)
     results, es_df = mlu.create_DiD_model(cluster_1_df, i)
     mlu.DiD_coeff_plot(es_df, i)
+    results, es_df = mlu.create_DiD_model(cluster_0_df, i, first_treat = "above_val_nearby_year")
+    mlu.DiD_coeff_plot(es_df, i, "Nearby Data Center")
+    results, es_df = mlu.create_DiD_model(cluster_1_df, i, first_treat = "above_val_nearby_year")
+    mlu.DiD_coeff_plot(es_df, i, treatment_type = "Nearby Data Center")
 
 ```

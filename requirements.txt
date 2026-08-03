@@ -21,6 +21,7 @@ matplotlib
 seaborn
 plotly
 skimpy
+kaleido
 
 # Environment & Configuration
 python-dotenv
