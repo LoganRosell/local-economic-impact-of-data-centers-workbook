@@ -357,7 +357,8 @@ cluster_labels = kmeans.predict(X_train)
 
 ```{python}
 # Check which featurs are contributing most to cluster separation
-X_train_df = pd.DataFrame(X_train, columns=X.columns)
+n_components = X_train.shape[1]
+X_train_df = pd.DataFrame(X_train, columns=[f"PC{i}" for i in range(n_components)])
 X_train_df['Cluster'] = cluster_labels
 
 # Calculate cluster means
