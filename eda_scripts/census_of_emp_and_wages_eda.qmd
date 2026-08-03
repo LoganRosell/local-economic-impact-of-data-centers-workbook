@@ -2,6 +2,7 @@
 ```{python}
 import pandas as pd
 import numpy as np
+import duckdb
 from pathlib import Path
 import os
 from dotenv import load_dotenv
@@ -26,12 +27,16 @@ data_dir = Path(os.environ["DATA_DIR"])
 
 ```{python}
 # setup connection variables to local sql db
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("DUCKDB_DB_URL")
 engine = create_engine(database_url)
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
 ```
 
 ```{python}
-df = pd.read_sql_table("naics_518_establishments", engine)
+# Load data
+df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
 cols = df.columns
 ```
 
