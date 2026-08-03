@@ -22,6 +22,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.preprocessing import QuantileTransformer
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -239,13 +240,13 @@ final_df = final_df.drop(columns=cols_with_high_missingness)
 ### Drop columns which don't meet LINE assumptions
 ```{python}
 # drop features with high skew (proxy for normality)
-skewed_cols =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["skew"] > 2].loc[:,"column"]
+# skewed_cols =  mlu.eda_summary(final_df)[mlu.eda_summary(final_df)["skew"] > 2].loc[:,"column"]
 
-skewed_cols = skewed_cols.to_list()
-if "datacenters" in skewed_cols:
-    skewed_cols.remove("datacenters")
+# skewed_cols = skewed_cols.to_list()
+# if "datacenters" in skewed_cols:
+#     skewed_cols.remove("datacenters")
 
-final_df = final_df.drop(columns=skewed_cols)
+# final_df = final_df.drop(columns=skewed_cols)
 ```
 
 ```{python}
@@ -265,8 +266,6 @@ final_df = final_df.drop(columns=[
     "civilian_labor_force_log",
     "per_capita_personal_income_dollars_spatial_weighted_avg_5",
     "unemployed_spatial_weighted_avg_5_log",
-    "tot_employee_count_industrial_per_capita_log1p",
-    "tot_employee_count_public_services_per_capita_log1p",
     "personal_income_thousands_of_dollars_yoy_change"
 ], errors="ignore")
 ```
@@ -274,15 +273,19 @@ final_df = final_df.drop(columns=[
 ### K-Means Clustering
 ```{python}
 final_df["has_datacenter"] = final_df["datacenters"] > 0
-X = final_df.drop(columns = ["has_datacenter"])
 y = final_df['has_datacenter']
 
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter"] 
+X = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
 
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42)
+
+qt = QuantileTransformer(output_distribution='normal', random_state=42)
+X_train = qt.fit_transform(X_train_raw)
+X_test = qt.transform(X_test_raw)
+
 ```
-
 
 ```{python}
 # check performance of clustering model 
@@ -300,6 +303,7 @@ plt.ylabel('Silhouette Score')
 plt.title('Silhouette Score vs. k')
 plt.show()
 ```
+
 Higher Silhouette scores indicate better separate bewetween clusters and thus better performance. Score ranges from -1 to 1
 
 ```{python}
@@ -463,7 +467,14 @@ outcomes = [
     "annual_payroll_professional_per_capita_log1p",
     "annual_payroll_public_services_per_capita_log1p",
     "annual_payroll_trade_transport_per_capita_log1p",
-    "population_log"
+    "population_log",
+    "tot_employee_count_industrial_per_capita_log1p",
+    "tot_employee_count_information_per_capita_log1p",
+    "tot_employee_count_primary_industries_per_capita_log1p",
+    "tot_employee_count_professional_per_capita_log1p",
+    "tot_employee_count_public_services_per_capita_log1p",
+    "tot_employee_count_trade_transport_per_capita_log1p"
+
 ]
 
 for i in outcomes:
