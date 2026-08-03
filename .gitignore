@@ -27,10 +27,7 @@ Thumbs.db
 shared_data/
 
 # Images
-*.png
-*.jpeg
-*.jpg
-*.gif
+
 
 # py caches
 __pycache__/
