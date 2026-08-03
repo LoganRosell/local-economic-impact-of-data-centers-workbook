@@ -173,7 +173,7 @@ def yoy_change(df, key_cols=None, include_cols=None):
 
         prev = grouped[col].shift(1)
 
-        df.loc[prev==0, change_col] = np.nan
+        df.loc[prev==0, change_col] = 0
 
     return df
 
