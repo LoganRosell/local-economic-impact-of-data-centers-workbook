@@ -270,7 +270,7 @@ final_df = final_df.drop(columns=[
 ```{python}
 # create columns to track if and when a county got its first dc
 first_treated = (
-    final_df[final_df["datacenters"] > 0]
+    final_df[final_df["datacenters"] > 2]
     .groupby("county_id")["year"]
     .min()
     .reset_index()
