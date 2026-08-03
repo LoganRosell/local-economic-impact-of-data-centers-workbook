@@ -844,7 +844,7 @@ def plot_model_residuals(residuals, fitted_values):
     plt.show()
 
 
-def create_DiD_model(df, y_var):
+def create_DiD_model(df, y_var, first_treat="first_dc_year"):
     cs = CallawaySantAnna(
     control_group="never_treated",  
     estimation_method="reg",
@@ -856,7 +856,7 @@ def create_DiD_model(df, y_var):
         outcome=y_var,
         unit="county_id",
         time="year",
-        first_treat="first_dc_year",
+        first_treat=first_treat,
         covariates=[],
         aggregate="all"
     )
@@ -873,7 +873,7 @@ def create_DiD_model(df, y_var):
 
 
 
-def DiD_coeff_plot(es_df, y_var):
+def DiD_coeff_plot(es_df, y_var, treatment_type = "Data Center"):
     plt.figure(figsize=(9, 5))
 
     plt.errorbar(
@@ -892,8 +892,8 @@ def DiD_coeff_plot(es_df, y_var):
     plt.plot(es_df.index, es_df["effect"], color="#1f77b4", linestyle="--", alpha=0.7)
     plt.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.7)
 
-    plt.title(f"Event Study: Data Center Impact on {y_var}", fontsize=13, fontweight="bold", pad=12)
-    plt.xlabel("Relative Year to Data Center Addition", fontsize=11)
+    plt.title(f"Event Study: {treatment_type} Impact on {y_var}", fontsize=13, fontweight="bold", pad=12)
+    plt.xlabel(f"Relative Year to {treatment_type} Addition", fontsize=11)
     plt.ylabel(f"Difference in {y_var}", fontsize=11)
     plt.xticks(es_df.index)
     plt.grid(True, linestyle="--", alpha=0.4)
