@@ -103,7 +103,7 @@ sns.lineplot(
 # Rapid Growth Period
 ax.axvline(
     x=2013,
-    color="gray",
+    color="red",
     linestyle="--",
     linewidth=1.5,
     alpha=0.7,
@@ -115,11 +115,34 @@ ax.annotate(
     xytext=(2012.5, 18000),  
     arrowprops=dict(
         arrowstyle="->",
-        color="#2e2c2a",
+        color="#a6132c",
         linewidth=1.2
     ),
     fontsize=11,
-    color="#2e2c2a",
+    color="#a6132c",
+    ha="right",
+)
+
+# GPT-3
+ax.axvline(
+    x=2020.5,
+    color="blue",
+    linestyle="--",
+    linewidth=1.5,
+    alpha=0.7,
+)
+
+ax.annotate(
+    "GPT-3 Introduced",
+    xy=(2020.5, 25500),
+    xytext=(2020, 30000),  
+    arrowprops=dict(
+        arrowstyle="->",
+        color="#233284",
+        linewidth=1.2
+    ),
+    fontsize=11,
+    color="#233284",
     ha="right",
 )
 
