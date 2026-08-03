@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn as nn
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.preprocessing import QuantileTransformer
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -266,9 +267,9 @@ train_df["has_datacenter"] = train_df["has_datacenter"].astype(float)
 test_df["has_datacenter"] = test_df["has_datacenter"].astype(float)
 
 # Fit scaler on the training counties
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(train_df[feature_cols])
-X_test_scaled = scaler.transform(test_df[feature_cols])
+pt = PowerTransformer(method='yeo-johnson')
+X_train_scaled = pt.fit_transform(train_df[feature_cols])
+X_test_scaled = pt.transform(test_df[feature_cols])
 
 # Tensors & Loaders
 X_train_tensor = torch.tensor(X_train_scaled, dtype=torch.float32)
@@ -580,8 +581,8 @@ with torch.no_grad():
     x_cf_recon = model.decode(mu_z, year_real, dc_bin_cf)
 
 # Transform predictions to original units
-baseline_features = scaler.inverse_transform(x_baseline_recon.cpu().numpy())
-cf_features = scaler.inverse_transform(x_cf_recon.cpu().numpy())
+baseline_features = pt.inverse_transform(x_baseline_recon.cpu().numpy())
+cf_features = pt.inverse_transform(x_cf_recon.cpu().numpy())
 
 # Measure predicted economic impact
 impact_df = pd.DataFrame(cf_features - baseline_features, columns=feature_cols)
