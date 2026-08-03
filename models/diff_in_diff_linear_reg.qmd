@@ -23,6 +23,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.preprocessing import QuantileTransformer
+from sklearn.decomposition import PCA
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
