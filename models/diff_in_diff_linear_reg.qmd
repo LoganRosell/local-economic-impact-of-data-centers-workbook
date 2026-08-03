@@ -66,7 +66,7 @@ county_df = con.execute("SELECT * FROM my_db.transformed.us_counties_spatial").d
 ### Create final table
 
 ```{python}
-bus_county_year_df = dbu.all_county_years(county_df, year_start=2007, year_end=2022)
+bus_county_year_df = dbu.all_county_years(county_df, year_start=2006, year_end=2022)
 
 pivoted_bus_df = mlu.pivot_naics(bus_df, code_df)
 
@@ -75,6 +75,8 @@ final_bus_df = bus_county_year_df[["county_id", "year"]].merge(pivoted_bus_df, o
 final_bus_df = dbu.impute_all_columns_vectorized(final_bus_df)
 
 final_bus_df = dbu.spatial_then_yoy(final_bus_df, county_df)
+
+final_bus_df = final_bus_df[final_bus_df["year"] != 2006] #drop 2006, it was only used to cacluated 2007's YoY change
 ```
 
 ```{python}
