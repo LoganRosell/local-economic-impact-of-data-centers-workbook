@@ -274,7 +274,8 @@ final_df = final_df.drop(columns=[
 ### K-Means Clustering
 ```{python}
 final_df["has_datacenter"] = final_df["datacenters"] > 0
-y = final_df['has_datacenter']
+y = np.log(final_df['datacenters'] + 1)
+
 
 cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter"] 
 X = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
@@ -289,6 +290,32 @@ X_test = qt.transform(X_test_raw)
 pca = PCA(n_components=0.85, random_state=42)
 X_train = pca.fit_transform(X_train)
 X_test = pca.transform(X_test)
+```
+
+```{python}
+# Plot top two PCA components lable by data center count
+model_reg = LinearRegression()
+model_reg.fit(X_train, y_train)
+
+y_pred_num = model_reg.predict(X_test)
+
+# Regression PCA Trainning Data
+plt.figure(figsize=(7, 5))
+scatter = plt.scatter(
+    X_train[:, 0],
+    X_train[:, 1],
+    c=y_train,
+    cmap='viridis',
+    edgecolors='none',
+    s=20,
+    alpha=0.3
+)
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.title('PCA Projection of US Counties by Logged Datacenter Count')
+plt.colorbar(scatter, label='Logged Datacenter Count')
+plt.tight_layout()
+plt.show()
 ```
 
 ```{python}
