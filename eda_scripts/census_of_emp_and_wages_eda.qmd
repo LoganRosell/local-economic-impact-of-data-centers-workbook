@@ -38,6 +38,7 @@ con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
 ```{python}
 # Load data
 df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
+df_nearby = con.execute("SELECT * FROM my_db.transformed.naics_518_nearby_estabs_50mi").df()
 cols = df.columns
 ```
 
@@ -55,6 +56,11 @@ df.loc[:, "estabs_log"] = np.log1p(df["estabs"])
 ```{python}
 # return number and percentage of NA values in each column
 print(skim(df))
+```
+
+
+```{python}
+print(skim(df_nearby))
 ```
 
 ```{python}
@@ -76,6 +82,10 @@ sns.histplot(data=df, x=df["estabs_log"])
 plt.show()
 ```
 
+```{python}
+sns.histplot(data=df_nearby[df_nearby["year"] == 2022], x = df_nearby[df_nearby["year"] == 2022]["nearby_estabs_50mi_landadj"])
+plt.show()
+```
 ### Checking Intra-Data-Source Correlation
 
 ```{python}
@@ -99,7 +109,7 @@ clean_nat_total = national_total_by_year[(national_total_by_year["year"] > 2006)
 
 sns.set_theme(style = "whitegrid", context = "talk")
 
-fig, ax = plt.subplots(figsize = (12, 4))
+fig, ax = plt.subplots(figsize = (8, 4))
 
 sns.lineplot(
     data = clean_nat_total,
