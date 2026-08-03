@@ -292,6 +292,8 @@ X_train = pca.fit_transform(X_train)
 X_test = pca.transform(X_test)
 ```
 
+
+### Plot PCA Projection
 ```{python}
 # Plot top two PCA components lable by data center count
 model_reg = LinearRegression()
@@ -316,7 +318,7 @@ plt.title('PCA Projection of US Counties by Logged Datacenter Count')
 plt.colorbar(scatter, label='Logged Datacenter Count')
 plt.tight_layout()
 
-plt.savefig('pca_datacenter_plot.png', dpi=300, bbox_inches='tight')
+plt.savefig('../poster_plots/pca_datacenter_plot.png', dpi=300, bbox_inches='tight')
 plt.show()
 ```
 
