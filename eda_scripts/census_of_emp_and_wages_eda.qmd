@@ -78,8 +78,8 @@ plt.show()
 ### Checking Intra-Data-Source Correlation
 
 ```{python}
-sns.pairplot(df[df["year"]==2022], corner=True)
-plt.show()
+# sns.pairplot(df[df["year"]==2022], corner=True)
+# plt.show()
 ```
 
 ### Data Consistency by Year
@@ -262,6 +262,53 @@ for i in cols_to_use:
     ## Make it look nice
     title_text = f"{eda_table_name}: {value_col} by county and year"
     fig = mu.apply_map_layout_and_controls(fig, title_text, years)
+
+    fig.show()
+```
+
+### Map total change in data center count over analysis period
+
+
+```{python}
+total_dc_change = df.groupby("county_id", as_index=False)["estabs_yoy_raw_diff"].sum()
+
+total_dc_change = total_dc_change.rename(columns={"estabs_yoy_raw_diff": "tot_dc_cnt_change"})
+
+```
+
+
+```{python}
+eda_table_name = "Data Center Total Change Between 2007 and 2022"
+cols_to_use = ["tot_dc_cnt_change"]
+
+for i in cols_to_use:
+    value_col = i
+    map_df = total_dc_change[["county_id", value_col]].dropna()
+
+    value_min = map_df[value_col].min()
+    value_max = map_df[value_col].max()
+
+    fig = go.Figure(
+        data=[
+            go.Choroplethmap(
+                geojson=counties_geojson, 
+                locations=map_df["county_id"],
+                z=map_df[value_col],
+                featureidkey="id",
+                colorscale="Viridis",
+                zmin=value_min,
+                zmax=value_max,
+                marker_opacity=0.5,
+                marker_line_width=0.3,
+                colorbar=dict(title=value_col),
+                hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
+            )
+        ]
+    )
+        
+    ## Make it look nice
+    title_text = f"{eda_table_name}: {value_col} by county"
+    fig = mu.apply_map_layout_and_controls(fig, title_text, [])
 
     fig.show()
 ```
