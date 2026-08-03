@@ -2,6 +2,7 @@
 ```{python}
 import pandas as pd
 import numpy as np
+import duckdb
 from pathlib import Path
 import os
 from dotenv import load_dotenv
@@ -27,13 +28,27 @@ data_dir = Path(os.environ["DATA_DIR"])
 
 ```{python}
 # setup connection variables to local sql db
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("DUCKDB_DB_URL")
 engine = create_engine(database_url)
+con = duckdb.connect()
+con.execute("INSTALL postgres; LOAD postgres;")  
+con.execute(f"ATTACH '{database_url}' AS my_db (TYPE postgres, READ_ONLY);")
 ```
 
 ```{python}
-df = pd.read_sql_table("naics_518_establishments", engine)
+# Load data
+df = con.execute("SELECT * FROM my_db.transformed.naics_518_establishments").df()
 cols = df.columns
+```
+
+```{python}
+# Limit to only years of analysis (2007-2022)
+df = df[(df["year"] > 2006) & (df["year"] < 2023)].reset_index(drop=True)
+```
+
+```{python}
+# Add logged version of estab counts to improve visualization
+df.loc[:, "estabs_log"] = np.log1p(df["estabs"])
 ```
 
 ### Missingness
@@ -56,17 +71,16 @@ print(df.describe().round(2))
 ### Statitical Distribution Plots
 
 ```{python}
-
 # Hisogram
-sns.histplot(data=df, x=df["estabs"])
+sns.histplot(data=df, x=df["estabs_log"])
 plt.show()
 ```
 
 ### Checking Intra-Data-Source Correlation
 
 ```{python}
-sns.pairplot(df[df["year"]==2022], corner=True)
-plt.show()
+# sns.pairplot(df[df["year"]==2022], corner=True)
+# plt.show()
 ```
 
 ### Data Consistency by Year
@@ -285,11 +299,11 @@ plot_county_coverage(df, "Busisness Patterns", "county coverage")
 
 # Update these:
 eda_table_name = "NAICS 518 Establishments"
-cols_to_use = [2]
+cols_to_use = ["estabs_log", "estabs_yoy_raw_diff"]
 
 ## one map per column
 for i in cols_to_use:
-    value_col = cols[i]
+    value_col = i
     map_df = df[["year", "county_id", value_col]].dropna()
 
     ## Get unique years
@@ -303,7 +317,7 @@ for i in cols_to_use:
 
     frames = []
     for year in years:
-        df_year = map_df[map_df["year"] == year] # dropped .copy() for speed
+        df_year = map_df[map_df["year"] == year]
         
         frames.append(
             go.Frame(
@@ -344,6 +358,53 @@ for i in cols_to_use:
     ## Make it look nice
     title_text = f"{eda_table_name}: {value_col} by county and year"
     fig = mu.apply_map_layout_and_controls(fig, title_text, years)
+
+    fig.show()
+```
+
+### Map total change in data center count over analysis period
+
+
+```{python}
+total_dc_change = df.groupby("county_id", as_index=False)["estabs_yoy_raw_diff"].sum()
+
+total_dc_change = total_dc_change.rename(columns={"estabs_yoy_raw_diff": "tot_dc_cnt_change"})
+
+```
+
+
+```{python}
+eda_table_name = "Data Center Total Change Between 2007 and 2022"
+cols_to_use = ["tot_dc_cnt_change"]
+
+for i in cols_to_use:
+    value_col = i
+    map_df = total_dc_change[["county_id", value_col]].dropna()
+
+    value_min = map_df[value_col].min()
+    value_max = map_df[value_col].max()
+
+    fig = go.Figure(
+        data=[
+            go.Choroplethmap(
+                geojson=counties_geojson, 
+                locations=map_df["county_id"],
+                z=map_df[value_col],
+                featureidkey="id",
+                colorscale="Viridis",
+                zmin=value_min,
+                zmax=value_max,
+                marker_opacity=0.5,
+                marker_line_width=0.3,
+                colorbar=dict(title=value_col),
+                hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
+            )
+        ]
+    )
+        
+    ## Make it look nice
+    title_text = f"{eda_table_name}: {value_col} by county"
+    fig = mu.apply_map_layout_and_controls(fig, title_text, [])
 
     fig.show()
 ```
