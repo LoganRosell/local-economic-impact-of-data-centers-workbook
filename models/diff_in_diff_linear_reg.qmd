@@ -169,7 +169,8 @@ final_df = final_df.drop(columns=[
 final_df = final_df.drop(columns=[
     "centroid_lon_yoy_change",
     "centroid_lat_yoy_change",
-    "land_area_sqmi_yoy_change"
+    "land_area_sqmi_yoy_change",
+    "water_area_sqmi_yoy_change"
 ])
 ```
 
