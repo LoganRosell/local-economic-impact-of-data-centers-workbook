@@ -73,7 +73,7 @@ plt.show()
 ```{python}
 # plot total data centers for the whole country over time
 national_total_by_year = df[["year", "estabs"]]
-national_total_by_year = national_total_by_year.groupby('year').sum()
+national_total_by_year = national_total_by_year.groupby('year').sum().reset_index()
 sns.lineplot(data=national_total_by_year, x="year", y="estabs")
 plt.show()
 ```
