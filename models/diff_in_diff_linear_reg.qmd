@@ -24,9 +24,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.decomposition import PCA
+import plotly.graph_objects as go
+import json
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
+import utils.map_utils as mu
 
 # Reload custom utilities
 importlib.reload(dbu)
@@ -277,7 +280,8 @@ final_df["has_datacenter"] = final_df["datacenters"] > 0
 y = np.log(final_df['datacenters'] + 1)
 
 
-cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter", "datacenters_spatial_weighted_avg_5_log1p", "datacenters_per_100_sqmi", "nearby_datacenters_50mi", "nearby_datacenters_50mi_per_100_sqmi"] 
+cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter", "datacenters_spatial_weighted_avg_5_log1p", "datacenters_per_100_sqmi", "nearby_datacenters_50mi", "nearby_datacenters_50mi_per_100_sqmi",
+"estabs_asinh", "estabs_asinh", "estabs_yoy_raw_diff", "estabs_asinh_growth", "estabs_spatial_asinh", "estabs_spatial_raw_diff", "estabs_spatial_asinh_growth","estabs_per_sqmi_log1p", "nearby_estabs_50mi_per_sqmi_log1p" ] 
 X = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
 
 X_train_raw, X_test_raw, y_train, y_test = train_test_split(
@@ -296,10 +300,10 @@ X_test = pca.transform(X_test)
 ### Plot PCA Projection
 ```{python}
 # Plot top two PCA components lable by data center count
-model_reg = LinearRegression()
-model_reg.fit(X_train, y_train)
+# model_reg = LinearRegression()
+# model_reg.fit(X_train, y_train)
 
-y_pred_num = model_reg.predict(X_test)
+# y_pred_num = model_reg.predict(X_test)
 
 # Regression PCA Trainning Data
 plt.figure(figsize=(7, 5))
@@ -470,6 +474,59 @@ print(f"cluster 1 personal income log mean: {c1_personal_income_log_mean}")
 
 ```
 
+#### map counties in cluster 0 and 1
+
+```{python}
+# load counties map data
+geojson_path = data_dir / "county_fips_codes/geojson_counties_fips.json"
+
+with open(geojson_path, "r") as f:
+    counties_geojson = json.load(f)
+```
+
+```{python}
+combined_df = pd.concat(
+    [
+        cluster_0_df[["county_id"]].assign(cluster=0),
+        cluster_1_df[["county_id"]].assign(cluster=1),
+    ],
+    ignore_index=True,
+)
+
+eda_table_name = "Counties Colored By Cluster"
+cols_to_use = ["cluster"]
+
+for i in cols_to_use:
+    value_col = i
+    map_df = combined_df[["county_id", value_col]].dropna()
+
+    value_min = map_df[value_col].min()
+    value_max = map_df[value_col].max()
+
+    fig = go.Figure(
+        data=[
+            go.Choroplethmap(
+                geojson=counties_geojson, 
+                locations=map_df["county_id"],
+                z=map_df[value_col],
+                featureidkey="id",
+                colorscale="Viridis",
+                zmin=value_min,
+                zmax=value_max,
+                marker_opacity=0.5,
+                marker_line_width=0.3,
+                colorbar=dict(title=value_col),
+                hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
+            )
+        ]
+    )
+        
+    ## Make it look nice
+    title_text = f"{eda_table_name}: {value_col} by county"
+    fig = mu.apply_map_layout_and_controls(fig, title_text, [])
+
+    fig.show()
+```
 
 
 #### Testing the effect adding the first DC to a county over time on personal income
