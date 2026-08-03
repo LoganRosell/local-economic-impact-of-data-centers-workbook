@@ -362,6 +362,62 @@ for i in cols_to_use:
     fig.show()
 ```
 
+#### Clean Version
+
+```{python}
+value_col = "estabs_log"
+
+map_df = df[["year", "county_id", value_col]].dropna()
+df_2022 = map_df[map_df["year"] == 2022]
+
+value_min = df_2022[value_col].min()
+value_max = df_2022[value_col].max()
+
+fig = go.Figure(
+    data=[
+        go.Choropleth(
+            geojson=counties_geojson, 
+            locations=df_2022["county_id"],
+            z=df_2022[value_col],
+            featureidkey="id",
+            colorscale="Viridis",
+            zmin=value_min,
+            zmax=value_max,
+            marker_opacity=0.85,
+            marker_line_width=0.1,
+            marker_line_color = "white",
+            colorbar=dict(title="Log number<br>of<br>establishments", len = 0.75)
+        )
+    ]
+)
+
+fig.update_layout(
+    title=dict(
+        text=f"NAICS 518 Establishments by county (2022)",
+        x=0.5,
+        xanchor="center",
+    ),
+    geo=dict(
+        scope="usa",
+        projection_type="albers usa",
+        showland=True,
+        landcolor="rgb(248, 248, 248)",
+        showcountries=False,
+        showlakes=False,
+        bgcolor="rgba(0,0,0,0)",
+        lonaxis=dict(range=[-125, -66]),
+        lataxis=dict(range=[24, 50])
+    ),
+    margin=dict(l=0, r=0, t=60, b=0),
+)
+
+    
+## Make it look nice
+fig.write_image("../poster_plots/map_dcs_2022.png", scale=3)
+
+fig.show()
+```
+
 ### Map total change in data center count over analysis period
 
 
