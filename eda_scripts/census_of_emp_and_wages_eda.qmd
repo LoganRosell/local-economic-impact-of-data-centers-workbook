@@ -100,6 +100,29 @@ sns.lineplot(
     markersize = 8
 )
 
+# Rapid Growth Period
+ax.axvline(
+    x=2013,
+    color="gray",
+    linestyle="--",
+    linewidth=1.5,
+    alpha=0.7,
+)
+
+ax.annotate(
+    "Rapid growth begins",
+    xy=(2013, clean_nat_total.loc[clean_nat_total["year"] == 2013, "estabs"].values[0]),
+    xytext=(2012.5, 18000),  
+    arrowprops=dict(
+        arrowstyle="->",
+        color="#2e2c2a",
+        linewidth=1.2
+    ),
+    fontsize=11,
+    color="#2e2c2a",
+    ha="right",
+)
+
 ax.set_title("National total NAICS 518 establishments (2007–2022)", pad=15)
 ax.set(xlabel=None)
 ax.set_ylabel("NAICS 518 establishments")
