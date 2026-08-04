@@ -280,9 +280,13 @@ final_df["has_datacenter"] = final_df["datacenters"] > 0
 y = np.log(final_df['datacenters'] + 1)
 
 
-cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter", "datacenters_spatial_weighted_avg_5_log1p", "datacenters_per_100_sqmi", "nearby_datacenters_50mi", "nearby_datacenters_50mi_per_100_sqmi",
-"estabs_asinh", "estabs_asinh", "estabs_yoy_raw_diff", "estabs_asinh_growth", "estabs_spatial_asinh", "estabs_spatial_raw_diff", "estabs_spatial_asinh_growth","estabs_per_sqmi_log1p", "nearby_estabs_50mi_per_sqmi_log1p" ] 
-X = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
+# cols_to_drop = ["datacenters", "county_id", "year", "has_datacenter", "datacenters_spatial_weighted_avg_5_log1p", "datacenters_per_100_sqmi", "nearby_datacenters_50mi", "nearby_datacenters_50mi_per_100_sqmi",
+# "estabs_asinh", "estabs_asinh", "estabs_yoy_raw_diff", "estabs_asinh_growth", "estabs_spatial_asinh", "estabs_spatial_raw_diff", "estabs_spatial_asinh_growth","estabs_per_sqmi_log1p", "nearby_estabs_50mi_per_sqmi_log1p" ] 
+
+cols_to_use = ["land_area_sqmi_log", "water_area_sqmi", "population_log"]
+
+# X = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
+X = final_df[cols_to_use]
 
 X_train_raw, X_test_raw, y_train, y_test = train_test_split(
     X, y, test_size=0.3, random_state=42)
@@ -327,20 +331,20 @@ plt.show()
 ```
 
 ```{python}
-# check performance of clustering model 
-scores = {}
-for k in range(2, 10, 2):
-    km = KMeans(n_clusters=k, init='k-means++', n_init=10, random_state=42)
-    labels = km.fit_predict(X_train)
-    scores[k] = silhouette_score(X_train, labels)
+# # check performance of clustering model 
+# scores = {}
+# for k in range(2, 10, 2):
+#     km = KMeans(n_clusters=k, init='k-means++', n_init=10, random_state=42)
+#     labels = km.fit_predict(X_train)
+#     scores[k] = silhouette_score(X_train, labels)
 
-# Plot scores
-plt.figure(figsize=(8, 4))
-plt.plot(list(scores.keys()), list(scores.values()), marker='o')
-plt.xlabel('Number of Clusters (k)')
-plt.ylabel('Silhouette Score')
-plt.title('Silhouette Score vs. k')
-plt.show()
+# # Plot scores
+# plt.figure(figsize=(8, 4))
+# plt.plot(list(scores.keys()), list(scores.values()), marker='o')
+# plt.xlabel('Number of Clusters (k)')
+# plt.ylabel('Silhouette Score')
+# plt.title('Silhouette Score vs. k')
+# plt.show()
 ```
 
 Higher Silhouette scores indicate better separate bewetween clusters and thus better performance. Score ranges from -1 to 1
