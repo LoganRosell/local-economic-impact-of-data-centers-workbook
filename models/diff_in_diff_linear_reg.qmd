@@ -663,13 +663,38 @@ outcomes = [
 ]
 
 for i in outcomes:
+    print(f"Data centers impact on {i}, cluster 0")
     results, es_df = mlu.create_DiD_model(cluster_0_df, i)
     mlu.DiD_coeff_plot(es_df, i)
+    print(f"Data centers impact on {i}, cluster 1")
     results, es_df = mlu.create_DiD_model(cluster_1_df, i)
     mlu.DiD_coeff_plot(es_df, i)
+    print(f"Nearby data centers impact on {i}, cluster 0")
     results, es_df = mlu.create_DiD_model(cluster_0_df, i, first_treat = "above_val_nearby_year")
     mlu.DiD_coeff_plot(es_df, i, "Nearby Data Center")
+    print(f"Nearby data centers impact on {i}, cluster 1")
     results, es_df = mlu.create_DiD_model(cluster_1_df, i, first_treat = "above_val_nearby_year")
     mlu.DiD_coeff_plot(es_df, i, treatment_type = "Nearby Data Center")
+```
 
+
+```{python}
+# figures to save for poster
+
+for cluster in [cluster_0_df, cluster_1_df]:
+    if cluster is cluster_0_df:
+        cluster_num = 0
+    else:
+        cluster_num = 1
+    # Air quality
+    results, es_df = mlu.create_DiD_model(cluster, "pm25_mean_daily_avg")
+    mlu.DiD_coeff_plot(es_df, "pm25_mean_daily_avg", save = True, clean_name = "PM2.5 Mean Daily Average", cluster_num = cluster_num)
+
+    # Personal Income
+    results, es_df = mlu.create_DiD_model(cluster, "personal_income_thousands_of_dollars_per_capita_log")
+    mlu.DiD_coeff_plot(es_df, "personal_income_thousands_of_dollars_per_capita_log", save = True, clean_name = "Log Personal Income", cluster_num = cluster_num)
+
+    # Unemployment
+    results, es_df = mlu.create_DiD_model(cluster, "unemployment_rate_pct", first_treat = "above_val_nearby_year")
+    mlu.DiD_coeff_plot(es_df, "unemployment_rate_pct", treatment_type = "Nearby Data Center", save = True, clean_name = "Unemployment Rate (%)", cluster_num = cluster_num)
 ```

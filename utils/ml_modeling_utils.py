@@ -873,8 +873,11 @@ def create_DiD_model(df, y_var, first_treat="first_dc_year"):
 
 
 
-def DiD_coeff_plot(es_df, y_var, treatment_type = "Data Center"):
-    plt.figure(figsize=(9, 5))
+def DiD_coeff_plot(es_df, y_var, treatment_type = "Data Center", save = False, clean_name = None, cluster_num = None):
+    if clean_name is None:
+        clean_name = y_var
+
+    plt.figure(figsize=(7, 4))
 
     plt.errorbar(
         x=es_df.index,
@@ -892,13 +895,19 @@ def DiD_coeff_plot(es_df, y_var, treatment_type = "Data Center"):
     plt.plot(es_df.index, es_df["effect"], color="#1f77b4", linestyle="--", alpha=0.7)
     plt.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.7)
 
-    plt.title(f"Event Study: {treatment_type} Impact on {y_var}", fontsize=13, fontweight="bold", pad=12)
+    if cluster_num is None:
+        plt.title(f"Event Study: {treatment_type} Impact on {clean_name}", fontsize=13, fontweight="bold", pad=12)
+    else:
+        plt.title(f"{treatment_type} Impact on {clean_name} in Cluster {cluster_num}", fontsize=13, fontweight="bold", pad=12)
+        
     plt.xlabel(f"Relative Year to {treatment_type} Addition", fontsize=11)
-    plt.ylabel(f"Difference in {y_var}", fontsize=11)
+    plt.ylabel(f"Difference in {clean_name}", fontsize=11)
     plt.xticks(es_df.index)
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.legend(frameon=True, loc="best")
 
     plt.tight_layout()
     plt.grid(False)
+    if save:
+        plt.savefig(f"../poster_plots/DiD_{clean_name}_{treatment_type}_{cluster_num}.png", dpi=70, bbox_inches="tight")
     plt.show()
