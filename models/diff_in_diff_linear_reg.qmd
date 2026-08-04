@@ -545,32 +545,51 @@ cols_to_use = ["cluster"]
 
 for i in cols_to_use:
     value_col = i
-    map_df = combined_df[["county_id", value_col]].dropna()
+    map_df = combined_df[["county_id", value_col]].dropna().copy()
 
-    value_min = map_df[value_col].min()
-    value_max = map_df[value_col].max()
+    map_df["flag"] = map_df["cluster"].astype(str)
 
-    fig = go.Figure(
-        data=[
-            go.Choroplethmap(
-                geojson=counties_geojson, 
-                locations=map_df["county_id"],
-                z=map_df[value_col],
-                featureidkey="id",
-                colorscale="Viridis",
-                zmin=value_min,
-                zmax=value_max,
-                marker_opacity=0.5,
-                marker_line_width=0.3,
-                colorbar=dict(title=value_col),
-                hovertemplate=f"County FIPS: %{{location}}<br>{value_col}: %{{z}}<extra></extra>"
-            )
-        ]
+    fig = px.choropleth(
+        map_df,
+        geojson=counties_geojson,
+        locations="county_id",
+        color="flag",
+        featureidkey="id",
+        color_discrete_map = {
+        "0": "#b63333",
+        "1": "#2e6385"
+        },
+        labels = {"flag": "Cluster"}
     )
-        
+    
+    fig.update_layout(
+        title=dict(
+            text=f"{eda_table_name}",
+            x=0.5,
+            xanchor="center",
+            y=0.98,
+            yanchor="top",
+            pad=dict(t=0, b=0)
+        ),
+        geo=dict(
+            scope="usa",
+            projection_type="albers usa",
+            showland=True,
+            landcolor="rgb(248, 248, 248)",
+            showcountries=False,
+            showlakes=False,
+            bgcolor="rgba(0,0,0,0)",
+            lonaxis=dict(range=[-125, -66]),
+            lataxis=dict(range=[24, 50])
+        ),
+        margin=dict(l=0, r=0, t=10, b=0),
+        width=600,
+        height=360
+    )
+
+    
     ## Make it look nice
-    title_text = f"{eda_table_name}: {value_col} by county"
-    fig = mu.apply_map_layout_and_controls(fig, title_text, [])
+    fig.write_image("../poster_plots/clusters.png", width=600, height=360, scale = 1)
 
     fig.show()
 ```
