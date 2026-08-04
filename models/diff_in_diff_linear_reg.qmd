@@ -405,6 +405,23 @@ kmeans_labled_df.loc[y_train.index, 'cluster_label'] = train_clusters
 kmeans_labled_df.loc[y_test.index, 'cluster_label'] = test_clusters
 
 kmeans_labled_df['cluster_label'] = kmeans_labled_df['cluster_label'].astype(int)
+
+county_mode_cluster = (
+    kmeans_labled_df
+    .groupby('county_id')['cluster_label']
+    .agg(lambda x: x.mode().iloc[0])
+    .reset_index()
+    .rename(columns={'cluster_label': 'county_mode_cluster'})
+)
+
+kmeans_labled_df = kmeans_labled_df.merge(
+    county_mode_cluster,
+    on='county_id',
+    how='left'
+)
+
+kmeans_labled_df['cluster_label'] = kmeans_labled_df['county_mode_cluster'].astype(int)
+kmeans_labled_df = kmeans_labled_df.drop(columns=['county_mode_cluster'])
 ```
 
 
