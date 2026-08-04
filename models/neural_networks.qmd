@@ -20,6 +20,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, roc_auc_score
 from sklearn.preprocessing import QuantileTransformer
 from sklearn.preprocessing import PowerTransformer
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
