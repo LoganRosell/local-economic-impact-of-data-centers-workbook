@@ -796,6 +796,6 @@ non_max_mask = (dc_bin_real < 4).cpu().numpy()
 # Calculate impact only for counties that actually received an intervention
 valid_impact_df = impact_df[non_max_mask]
 
-print("--- Top Predicted Economic Impacts (+1 DC Tier) for Non-Max Counties ---")
-print(valid_impact_df.mean().sort_values(ascending=False).head(10))
+print("--- Top Predicted Economic Impacts (+2 DC Tier) for Non-Max Counties ---")
+print(valid_impact_df.mean().sort_values(ascending=False).head(25))
 ```
