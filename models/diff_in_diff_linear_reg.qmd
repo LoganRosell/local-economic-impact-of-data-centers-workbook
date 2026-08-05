@@ -462,7 +462,7 @@ final_df = final_df.merge(
 ```{python}
 # create columns to track if and when a county got its first dc
 first_treated_nearby = (
-    final_df[final_df["nearby_datacenters_50mi"] > 112] # Median
+    final_df[final_df["nearby_datacenters_50mi"] > 112] # 73rd percentile
     .groupby("county_id")["year"]
     .min()
     .reset_index()
@@ -543,11 +543,21 @@ combined_df = pd.concat(
 eda_table_name = "Counties Colored By Cluster"
 cols_to_use = ["cluster"]
 
+cluster_labels = {
+    0: "0 (More Rural)",
+    1: "1 (More Urban)"
+}
+
+cluster_colors = {
+    "0 (More Rural)": "#C67A6D",
+    "1 (More Urban)": "#5B8FA8"
+}
+
 for i in cols_to_use:
     value_col = i
     map_df = combined_df[["county_id", value_col]].dropna().copy()
 
-    map_df["flag"] = map_df["cluster"].astype(str)
+    map_df["flag"] = map_df["cluster"].map(cluster_labels)
 
     fig = px.choropleth(
         map_df,
@@ -555,11 +565,14 @@ for i in cols_to_use:
         locations="county_id",
         color="flag",
         featureidkey="id",
-        color_discrete_map = {
-        "0": "#b63333",
-        "1": "#2e6385"
-        },
+        color_discrete_map = cluster_colors,
+        category_orders={"flag": ["0 (More Rural)", "1 (More Urban)"]},
         labels = {"flag": "Cluster"}
+    )
+
+    fig.update_traces(
+        marker_line_color="#F7F7F7",
+        marker_line_width=0.1
     )
     
     fig.update_layout(
@@ -569,7 +582,8 @@ for i in cols_to_use:
             xanchor="center",
             y=0.98,
             yanchor="top",
-            pad=dict(t=0, b=0)
+            pad=dict(t=0, b=0),
+            font=dict(size=24)
         ),
         geo=dict(
             scope="usa",
@@ -582,14 +596,23 @@ for i in cols_to_use:
             lonaxis=dict(range=[-125, -66]),
             lataxis=dict(range=[24, 50])
         ),
-        margin=dict(l=0, r=0, t=10, b=0),
-        width=600,
-        height=360
+        legend=dict(
+            title_text="",
+            x=0.98,
+            xanchor="right",
+            y=0.25,
+            yanchor="middle",
+            bgcolor="rgba(255,255,255,0.75)",
+            font=dict(size=18)
+        ),
+        margin=dict(l=0, r=0, t=0, b=0),
+        width=900,
+        height=450
     )
 
     
     ## Make it look nice
-    fig.write_image("../poster_plots/clusters.png", width=600, height=360, scale = 1)
+    fig.write_image("../poster_plots/clusters.png", width=900, height=450, scale = 1)
 
     fig.show()
 ```
@@ -663,17 +686,20 @@ outcomes = [
 ]
 
 for i in outcomes:
-    print(f"Data centers impact on {i}, cluster 0")
     results, es_df = mlu.create_DiD_model(cluster_0_df, i)
+    print(f"Data centers impact on {i}, cluster 0: {es_df.loc[5, "effect"]} {es_df.loc[5, "conf_int"]}")
     mlu.DiD_coeff_plot(es_df, i)
-    print(f"Data centers impact on {i}, cluster 1")
+
     results, es_df = mlu.create_DiD_model(cluster_1_df, i)
+    print(f"Data centers impact on {i}, cluster 1: {es_df.loc[5, "effect"]} {es_df.loc[5, "conf_int"]}")
     mlu.DiD_coeff_plot(es_df, i)
-    print(f"Nearby data centers impact on {i}, cluster 0")
+
     results, es_df = mlu.create_DiD_model(cluster_0_df, i, first_treat = "above_val_nearby_year")
+    print(f"Nearby data centers impact on {i}, cluster 0: {es_df.loc[5, "effect"]} {es_df.loc[5, "conf_int"]}")
     mlu.DiD_coeff_plot(es_df, i, "Nearby Data Center")
-    print(f"Nearby data centers impact on {i}, cluster 1")
+
     results, es_df = mlu.create_DiD_model(cluster_1_df, i, first_treat = "above_val_nearby_year")
+    print(f"Nearby data centers impact on {i}, cluster 1: {es_df.loc[5, "effect"]} {es_df.loc[5, "conf_int"]}")
     mlu.DiD_coeff_plot(es_df, i, treatment_type = "Nearby Data Center")
 ```
 
