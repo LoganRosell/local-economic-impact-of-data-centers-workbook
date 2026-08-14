@@ -22,6 +22,7 @@ from sklearn.preprocessing import QuantileTransformer
 from sklearn.preprocessing import PowerTransformer
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+from sklearn.model_selection import GroupKFold
 
 import utils.db_cleaning_utils as dbu
 import utils.ml_modeling_utils as mlu
@@ -401,16 +402,15 @@ cluster_1_df = final_df[final_df["county_mode_cluster"] == 1].copy()
 
 ```{python}
 
-def prepare_spatial_data(
+def prepare_spatial_data_fold(
     df,
+    train_idx,
+    test_idx,
     target_col="has_datacenter",
     condition_cols=None,
-    test_size=0.20,
     batch_size=128,
-    random_state=42,
 ):
-    """Splits, scales, and creates PyTorch DataLoaders for spatio-temporal data."""
-    # Work on a copy to prevent SettingWithCopy warnings on input df
+    """Prepares PyTorch DataLoaders and metadata for a specific train/test split fold."""
     df = df.copy()
 
     # Create year_idx mapping
@@ -418,17 +418,9 @@ def prepare_spatial_data(
     year_to_idx = {yr: i for i, yr in enumerate(unique_years)}
     df["year_idx"] = df["year"].map(year_to_idx)
 
-    # Spatial train/test split by county_id
-    unique_counties = df["county_id"].unique()
-    train_counties, test_counties = train_test_split(
-        unique_counties, test_size=test_size, random_state=random_state
-    )
-
-    train_mask = df["county_id"].isin(train_counties)
-    test_mask = df["county_id"].isin(test_counties)
-
-    train_df = df[train_mask].copy()
-    test_df = df[test_mask].copy()
+    # Slice train and test dataframes using fold indices
+    train_df = df.iloc[train_idx].copy()
+    test_df = df.iloc[test_idx].copy()
 
     # Identify feature columns
     if condition_cols is None:
@@ -447,21 +439,27 @@ def prepare_spatial_data(
     train_df[target_col] = train_df[target_col].astype(float)
     test_df[target_col] = test_df[target_col].astype(float)
 
-    # Fit scaler on training set
+    # Fit scaler on the fold's training set
     pt = PowerTransformer(method="yeo-johnson")
     X_train_scaled = pt.fit_transform(train_df[feature_cols])
     X_test_scaled = pt.transform(test_df[feature_cols])
 
     # Convert to Tensors
     X_train_tensor = torch.tensor(X_train_scaled, dtype=torch.float32)
-    year_train_tensor = torch.tensor(train_df["year_idx"].values, dtype=torch.long)
-    y_train_tensor = torch.tensor(train_df[target_col].values, dtype=torch.float32)
+    year_train_tensor = torch.tensor(
+        train_df["year_idx"].values, dtype=torch.long
+    )
     dc_train_tensor = torch.tensor(train_df["dc_bin"].values, dtype=torch.long)
+    y_train_tensor = torch.tensor(
+        train_df[target_col].values, dtype=torch.float32
+    )
 
     X_test_tensor = torch.tensor(X_test_scaled, dtype=torch.float32)
-    year_test_tensor = torch.tensor(test_df["year_idx"].values, dtype=torch.long)
-    y_test_tensor = torch.tensor(test_df[target_col].values, dtype=torch.float32)
+    year_test_tensor = torch.tensor(
+        test_df["year_idx"].values, dtype=torch.long
+    )
     dc_test_tensor = torch.tensor(test_df["dc_bin"].values, dtype=torch.long)
+    y_test_tensor = torch.tensor(test_df[target_col].values, dtype=torch.float32)
 
     # Build TensorDatasets and DataLoaders
     train_dataset = TensorDataset(
@@ -471,7 +469,9 @@ def prepare_spatial_data(
         X_test_tensor, year_test_tensor, dc_test_tensor, y_test_tensor
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True
+    )
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return {
@@ -488,17 +488,8 @@ def prepare_spatial_data(
         "year_to_idx": year_to_idx,
     }
 
-data = prepare_spatial_data(cluster_1_df)
-
-train_loader = data["train_loader"]
-test_loader = data["test_loader"]
-input_dim = data["input_dim"]
-num_years = data["num_years"]
-feature_cols = data["feature_cols"]
-train_dataset = data["train_dataset"]
-test_dataset = data["test_dataset"]
-pt = data["scaler"]
 ```
+
 
 
 ```{python}
@@ -571,6 +562,7 @@ class DCandYearConditionedVAE(nn.Module):
 
 
 ```{python}
+
 def vae_loss_function(recon_x, x, mu, logvar, beta=0.01):
     recon_loss = nn.functional.mse_loss(recon_x, x, reduction='sum')
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
@@ -586,65 +578,106 @@ else:
 
 print(f"Using device: {device}")
 
-model = DCandYearConditionedVAE(
-    input_dim=input_dim, 
-    num_years=num_years, 
-    time_embed_dim=8,
-    dc_bins=8,
-    dc_embed_dim=4, 
-    hidden_dim_1=128,
-    hidden_dim_2=16, 
-    latent_dim=8
-).to(device)
+# Target dataframe (cluster 1 or 0)
+target_df = cluster_0_df.reset_index(drop=True)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+# Set up spatial GroupKFold by county_id
+n_splits = 5
+gkf = GroupKFold(n_splits=n_splits)
+groups = target_df["county_id"].values
 
-# Initialize list to store loss per epoch
-loss_history = []
-test_loss_history = []
-
-# Training Loop
+cv_results = []
 epochs = 50
-for epoch in range(epochs):
-    # --- Training Phase ---
-    model.train()
-    total_loss = 0.0
-    for x_batch, year_batch, dc_batch, _ in train_loader:
-        x_batch = x_batch.to(device)
-        year_batch = year_batch.to(device)
-        dc_batch = dc_batch.to(device)
-        
-        optimizer.zero_grad()
-        recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
-        loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
-        
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        
-        total_loss += loss.item()
-        
-    avg_epoch_loss = total_loss / len(train_loader.dataset)
-    loss_history.append(avg_epoch_loss)
-    
-    # --- Testing Phase ---
-    model.eval()
-    total_test_loss = 0.0
-    with torch.no_grad():
-        for x_batch, year_batch, dc_batch, _ in test_loader:
+
+# Cross-Validation Loop
+for fold, (train_idx, test_idx) in enumerate(gkf.split(target_df, groups=groups)):
+    print(f"\n========== Fold {fold + 1}/{n_splits} ==========")
+
+    # Prepare data loaders and dimensions specifically for this fold
+    fold_data = prepare_spatial_data_fold(
+        df=target_df,
+        train_idx=train_idx,
+        test_idx=test_idx,
+        batch_size=128
+    )
+
+    train_loader = fold_data["train_loader"]
+    test_loader = fold_data["test_loader"]
+    input_dim = fold_data["input_dim"]
+    num_years = fold_data["num_years"]
+
+    # Re-instantiate model & optimizer so weights reset every fold
+    model = DCandYearConditionedVAE(
+        input_dim=input_dim, 
+        num_years=num_years, 
+        time_embed_dim=8,
+        dc_bins=8,
+        dc_embed_dim=4, 
+        hidden_dim_1=128,
+        hidden_dim_2=16, 
+        latent_dim=8
+    ).to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    loss_history = []
+    test_loss_history = []
+
+    # Training Loop for Current Fold
+    for epoch in range(epochs):
+        # --- Training Phase ---
+        model.train()
+        total_loss = 0.0
+        for x_batch, year_batch, dc_batch, _ in train_loader:
             x_batch = x_batch.to(device)
             year_batch = year_batch.to(device)
             dc_batch = dc_batch.to(device)
             
+            optimizer.zero_grad()
             recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
-            test_loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
-            total_test_loss += test_loss.item()
+            loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
             
-    avg_test_loss = total_test_loss / len(test_loader.dataset)
-    test_loss_history.append(avg_test_loss)
-    
-    if (epoch + 1) % 10 == 0:
-        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_epoch_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            
+            total_loss += loss.item()
+            
+        avg_epoch_loss = total_loss / len(train_loader.dataset)
+        loss_history.append(avg_epoch_loss)
+        
+        # --- Testing Phase ---
+        model.eval()
+        total_test_loss = 0.0
+        with torch.no_grad():
+            for x_batch, year_batch, dc_batch, _ in test_loader:
+                x_batch = x_batch.to(device)
+                year_batch = year_batch.to(device)
+                dc_batch = dc_batch.to(device)
+                
+                recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
+                test_loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
+                total_test_loss += test_loss.item()
+                
+        avg_test_loss = total_test_loss / len(test_loader.dataset)
+        test_loss_history.append(avg_test_loss)
+        
+        if (epoch + 1) % 10 == 0:
+            print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_epoch_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
+
+    cv_results.append({
+        "fold": fold + 1,
+        "final_train_loss": loss_history[-1],
+        "final_test_loss": test_loss_history[-1],
+        "train_loss_history": loss_history,
+        "test_loss_history": test_loss_history
+    })
+
+# Summary across folds
+mean_train = np.mean([r["final_train_loss"] for r in cv_results])
+mean_test = np.mean([r["final_test_loss"] for r in cv_results])
+print(f"\nMean CV Train Loss: {mean_train:.4f}")
+print(f"Mean CV Test Loss:  {mean_test:.4f}")
 ```
 
 ```{python}
@@ -710,7 +743,7 @@ latents = []
 eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
 
 with torch.no_grad():
-    for x_batch, year_batch, dc_batch, _ in eval_train_loader:  # Unpack 3 values
+    for x_batch, year_batch, dc_batch, _ in eval_train_loader: 
         x_batch = x_batch.to(device)
         year_batch = year_batch.to(device)
         dc_batch = dc_batch.to(device)
