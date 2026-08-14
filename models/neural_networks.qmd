@@ -442,7 +442,21 @@ def prepare_spatial_data_fold(
     # Fit scaler on the fold's training set
     pt = PowerTransformer(method="yeo-johnson")
     X_train_scaled = pt.fit_transform(train_df[feature_cols])
-    X_test_scaled = pt.transform(test_df[feature_cols])
+
+    # enforce boundaries to prevent out-of-fold power-law value explosion
+    train_min = train_df[feature_cols].min(axis=0)
+    train_max = train_df[feature_cols].max(axis=0)
+    X_test_bounded = (
+        test_df[feature_cols]
+        .clip(lower=train_min, upper=train_max, axis=1)
+        .values
+    )
+
+    X_test_scaled = pt.transform(X_test_bounded)
+
+    # clip scaled values
+    X_train_scaled = np.clip(X_train_scaled, -10.0, 10.0)
+    X_test_scaled = np.clip(X_test_scaled, -10.0, 10.0)
 
     # Convert to Tensors
     X_train_tensor = torch.tensor(X_train_scaled, dtype=torch.float32)
@@ -571,8 +585,8 @@ def vae_loss_function(recon_x, x, mu, logvar, beta=0.01):
 # Check for CUDA (NVIDIA), MPS (Apple Silicon), or fall back to CPU
 if torch.cuda.is_available():
     device = torch.device("cuda")
-elif torch.backends.mps.is_available():
-    device = torch.device("mps")
+# elif torch.backends.mps.is_available():
+#     device = torch.device("mps")
 else:
     device = torch.device("cpu")
 
