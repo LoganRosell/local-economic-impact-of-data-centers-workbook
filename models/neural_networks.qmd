@@ -592,8 +592,17 @@ else:
 
 print(f"Using device: {device}")
 
+
+
+# ============= update cluster =================
 # Target dataframe (cluster 1 or 0)
-target_df = cluster_0_df.reset_index(drop=True)
+cl = 0
+if cl == 0:
+    cl_name = "cluster_0"
+    target_df = cluster_0_df.reset_index(drop=True)
+if cl == 1:
+    cl_name = "cluster_1"
+    target_df = cluster_1_df.reset_index(drop=True)
 
 # Set up spatial GroupKFold by county_id
 n_splits = 5
@@ -605,14 +614,14 @@ epochs = 50
 
 # Cross-Validation Loop
 for fold, (train_idx, test_idx) in enumerate(gkf.split(target_df, groups=groups)):
-    print(f"\n========== Fold {fold + 1}/{n_splits} ==========")
+    print(f"\n========== Fold {fold + 1}/{n_splits} ({cl_name}) ==========")
 
     # Prepare data loaders and dimensions specifically for this fold
     fold_data = prepare_spatial_data_fold(
         df=target_df,
         train_idx=train_idx,
         test_idx=test_idx,
-        batch_size=256
+        batch_size=1024
     )
 
     train_loader = fold_data["train_loader"]
@@ -700,7 +709,7 @@ plt.plot(range(1, epochs + 1), loss_history, label="Training Loss")
 plt.plot(range(1, epochs + 1), test_loss_history, label="Testing Loss", linestyle="--")
 plt.xlabel("Epoch")
 plt.ylabel("Loss per Sample")
-plt.title("VAE Loss Over Time")
+plt.title(f"VAE Loss Over Time ({cl_name})")
 plt.grid(True, linestyle="--", alpha=0.5)
 plt.legend()
 plt.show()
@@ -740,10 +749,10 @@ mse_df = pd.DataFrame({
 }).sort_values("mse", ascending=False)
 
 # Display Top 10 Highest Loss Features (Hardest to reconstruct)
-print("--- Top 10 Hardest Features to Reconstruct ---")
+print(f"--- Top 10 Hardest Features to Reconstruct: {cl_name} ---")
 print(mse_df.head(10).to_string(index=False))
 
-print("\n--- Top 10 Easiest Features to Reconstruct ---")
+print(f"\n--- Top 10 Easiest Features to Reconstruct: {cl_name} ---")
 print(mse_df.tail(10).to_string(index=False))
 ```
 
@@ -799,7 +808,7 @@ clf = LogisticRegression(class_weight="balanced", max_iter=1000)
 clf.fit(Z_train, y_train)
 
 preds = clf.predict_proba(Z_test)[:, 1]
-print(f"Test ROC-AUC using ONLY 8 Latent Dimensions: {roc_auc_score(y_test, preds):.4f}")
+print(f"Test ROC-AUC using ONLY 8 Latent Dimensions ({cl_name}): {roc_auc_score(y_test, preds):.4f}")
 
 # Custom accuracy report
 mlu.model_accuracy_report(clf, Z_train, y_train, Z_test, y_test)
@@ -840,6 +849,6 @@ non_max_mask = (dc_bin_real < 4).cpu().numpy()
 # Calculate impact only for counties that actually received an intervention
 valid_impact_df = impact_df[non_max_mask]
 
-print("--- Top Predicted Economic Impacts (+2 DC Tier) for Non-Max Counties ---")
+print(f"--- Top Predicted Economic Impacts (+2 DC Tier) for Non-Max Counties ({cl_name}) ---")
 print(valid_impact_df.mean().sort_values(ascending=False).head(25))
 ```
