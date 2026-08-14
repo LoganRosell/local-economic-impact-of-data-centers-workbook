@@ -612,7 +612,7 @@ for fold, (train_idx, test_idx) in enumerate(gkf.split(target_df, groups=groups)
         df=target_df,
         train_idx=train_idx,
         test_idx=test_idx,
-        batch_size=128
+        batch_size=256
     )
 
     train_loader = fold_data["train_loader"]
