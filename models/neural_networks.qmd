@@ -414,9 +414,9 @@ def prepare_spatial_data_fold(
     df = df.copy()
 
     # Create year_idx mapping
-    unique_years = sorted(df["year"].unique())
-    year_to_idx = {yr: i for i, yr in enumerate(unique_years)}
-    df["year_idx"] = df["year"].map(year_to_idx)
+    # unique_years = sorted(df["year"].unique())
+    # year_to_idx = {yr: i for i, yr in enumerate(unique_years)}
+    # df["year_idx"] = df["year"].map(year_to_idx)
 
     # Slice train and test dataframes using fold indices
     train_df = df.iloc[train_idx].copy()
@@ -458,34 +458,26 @@ def prepare_spatial_data_fold(
     X_train_scaled = np.clip(X_train_scaled, -10.0, 10.0)
     X_test_scaled = np.clip(X_test_scaled, -10.0, 10.0)
 
+    # scale year and dc conditioning values
+    cond_cols = ["year", "dc_bin"]
+    cond_scaler = StandardScaler()
+    cond_train_scaled = cond_scaler.fit_transform(train_df[cond_cols])
+    cond_test_scaled = cond_scaler.transform(test_df[cond_cols])
+
     # Convert to Tensors
     X_train_tensor = torch.tensor(X_train_scaled, dtype=torch.float32)
-    year_train_tensor = torch.tensor(
-        train_df["year_idx"].values, dtype=torch.long
-    )
-    dc_train_tensor = torch.tensor(train_df["dc_bin"].values, dtype=torch.long)
-    y_train_tensor = torch.tensor(
-        train_df[target_col].values, dtype=torch.float32
-    )
+    cond_train_tensor = torch.tensor(cond_train_scaled, dtype=torch.float32)
+    y_train_tensor = torch.tensor( train_df[target_col].values, dtype=torch.float32)
 
     X_test_tensor = torch.tensor(X_test_scaled, dtype=torch.float32)
-    year_test_tensor = torch.tensor(
-        test_df["year_idx"].values, dtype=torch.long
-    )
-    dc_test_tensor = torch.tensor(test_df["dc_bin"].values, dtype=torch.long)
+    cond_test_tensor = torch.tensor(cond_test_scaled, dtype=torch.float32)
     y_test_tensor = torch.tensor(test_df[target_col].values, dtype=torch.float32)
-
+    
     # Build TensorDatasets and DataLoaders
-    train_dataset = TensorDataset(
-        X_train_tensor, year_train_tensor, dc_train_tensor, y_train_tensor
-    )
-    test_dataset = TensorDataset(
-        X_test_tensor, year_test_tensor, dc_test_tensor, y_test_tensor
-    )
+    train_dataset = TensorDataset(X_train_tensor, cond_train_tensor, y_train_tensor)
+    test_dataset = TensorDataset(X_test_tensor, cond_test_tensor, y_test_tensor)
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True
-    )
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     return {
@@ -494,29 +486,30 @@ def prepare_spatial_data_fold(
         "train_dataset": train_dataset,
         "test_dataset": test_dataset,
         "scaler": pt,
+        "cond_scaler": cond_scaler,
         "feature_cols": feature_cols,
+        "cond_cols": cond_cols,
         "input_dim": X_train_tensor.shape[1],
-        "num_years": len(unique_years),
+        "cond_dim": cond_train_tensor.shape[1],
         "train_df": train_df,
         "test_df": test_df,
-        "year_to_idx": year_to_idx,
     }
 
 ```
 
 
-
 ```{python}
 class DCandYearConditionedVAE(nn.Module):
-    def __init__(self, input_dim, num_years, time_embed_dim=8, dc_bins=8,dc_embed_dim=4, hidden_dim_1=32, hidden_dim_2=16, latent_dim=8):
+    def __init__(
+        self,
+        input_dim,
+        cond_dim=2,
+        hidden_dim_1=32,
+        hidden_dim_2=16,
+        latent_dim=8
+        ):
         super(DCandYearConditionedVAE, self).__init__()
         
-        # Trainable Year Embedding
-        self.year_embedding = nn.Embedding(num_embeddings=num_years, embedding_dim=time_embed_dim)
-        self.dc_embedding = nn.Embedding(num_embeddings=dc_bins, embedding_dim=dc_embed_dim)
-        
-        cond_dim = time_embed_dim + dc_embed_dim
-        # Combined Input Dimension: Continuous Features + Year + DC
         encoder_input_dim = input_dim + cond_dim
         
         # Encoder
@@ -554,33 +547,28 @@ class DCandYearConditionedVAE(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def encode(self, x, year_idx, dc_bin):
-        t_embed = self.year_embedding(year_idx)
-        dc_embed = self.dc_embedding(dc_bin)
-        enc_input = torch.cat([x, t_embed, dc_embed], dim=1)
+    def encode(self, x, cond):
+        enc_input = torch.cat([x, cond], dim=1)
         h = self.encoder(enc_input)
         return self.fc_mu(h), self.fc_logvar(h)
 
-    def decode(self, z, year_idx, dc_bin):
-        t_embed = self.year_embedding(year_idx)
-        dc_embed = self.dc_embedding(dc_bin)
-        dec_input = torch.cat([z, t_embed, dc_embed], dim=1)
+    def decode(self, z, cond):
+        dec_input = torch.cat([z, cond], dim=1)
         return self.decoder(dec_input)
 
-    def forward(self, x, year_idx, dc_bin):
-        mu, logvar = self.encode(x, year_idx, dc_bin)
+    def forward(self, x, cond):
+        mu, logvar = self.encode(x, cond)
         z = self.reparameterize(mu, logvar) if self.training else mu
-        x_recon = self.decode(z, year_idx, dc_bin)
+        x_recon = self.decode(z, cond)
         return x_recon, mu, logvar
 ```
 
-
 ```{python}
-
 def vae_loss_function(recon_x, x, mu, logvar, beta=0.01):
-    recon_loss = nn.functional.mse_loss(recon_x, x, reduction='sum')
+    recon_loss = nn.functional.mse_loss(recon_x, x, reduction="sum")
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + beta * kl_loss
+
 
 # Check for CUDA (NVIDIA), MPS (Apple Silicon), or fall back to CPU
 if torch.cuda.is_available():
@@ -592,11 +580,9 @@ else:
 
 print(f"Using device: {device}")
 
-
-
 # ============= update cluster =================
 # Target dataframe (cluster 1 or 0)
-cl = 0
+cl = 1
 if cl == 0:
     cl_name = "cluster_0"
     target_df = cluster_0_df.reset_index(drop=True)
@@ -605,7 +591,7 @@ if cl == 1:
     target_df = cluster_1_df.reset_index(drop=True)
 
 # Set up spatial GroupKFold by county_id
-n_splits = 5
+n_splits = 3
 gkf = GroupKFold(n_splits=n_splits)
 groups = target_df["county_id"].values
 
@@ -613,32 +599,31 @@ cv_results = []
 epochs = 50
 
 # Cross-Validation Loop
-for fold, (train_idx, test_idx) in enumerate(gkf.split(target_df, groups=groups)):
+for fold, (train_idx, test_idx) in enumerate(
+    gkf.split(target_df, groups=groups)
+):
     print(f"\n========== Fold {fold + 1}/{n_splits} ({cl_name}) ==========")
 
     # Prepare data loaders and dimensions specifically for this fold
     fold_data = prepare_spatial_data_fold(
-        df=target_df,
-        train_idx=train_idx,
-        test_idx=test_idx,
-        batch_size=1024
+        df=target_df, train_idx=train_idx, test_idx=test_idx, batch_size=1024
     )
 
     train_loader = fold_data["train_loader"]
     test_loader = fold_data["test_loader"]
+    train_dataset = fold_data["train_dataset"]  # <--- Unpack here
+    test_dataset = fold_data["test_dataset"]
     input_dim = fold_data["input_dim"]
-    num_years = fold_data["num_years"]
+    cond_dim = fold_data["cond_dim"]
+    feature_cols = fold_data["feature_cols"]
 
-    # Re-instantiate model & optimizer so weights reset every fold
+    # Re-instantiate model & optimizer to reset weights every fold
     model = DCandYearConditionedVAE(
-        input_dim=input_dim, 
-        num_years=num_years, 
-        time_embed_dim=8,
-        dc_bins=8,
-        dc_embed_dim=4, 
+        input_dim=input_dim,
+        cond_dim=cond_dim,
         hidden_dim_1=128,
-        hidden_dim_2=16, 
-        latent_dim=8
+        hidden_dim_2=16,
+        latent_dim=8,
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -646,54 +631,56 @@ for fold, (train_idx, test_idx) in enumerate(gkf.split(target_df, groups=groups)
     loss_history = []
     test_loss_history = []
 
-    # Training Loop for Current Fold
+    # Training Loop for Current Fold (Indented inside fold loop)
     for epoch in range(epochs):
         # --- Training Phase ---
         model.train()
         total_loss = 0.0
-        for x_batch, year_batch, dc_batch, _ in train_loader:
+        for x_batch, cond_batch, _ in train_loader:
             x_batch = x_batch.to(device)
-            year_batch = year_batch.to(device)
-            dc_batch = dc_batch.to(device)
-            
+            cond_batch = cond_batch.to(device)
+
             optimizer.zero_grad()
-            recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
+            recon_batch, mu, logvar = model(x_batch, cond_batch)
             loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
-            
+
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
-            
+
             total_loss += loss.item()
-            
+
         avg_epoch_loss = total_loss / len(train_loader.dataset)
         loss_history.append(avg_epoch_loss)
-        
+
         # --- Testing Phase ---
         model.eval()
         total_test_loss = 0.0
         with torch.no_grad():
-            for x_batch, year_batch, dc_batch, _ in test_loader:
+            for x_batch, cond_batch, _ in test_loader:
                 x_batch = x_batch.to(device)
-                year_batch = year_batch.to(device)
-                dc_batch = dc_batch.to(device)
-                
-                recon_batch, mu, logvar = model(x_batch, year_batch, dc_batch)
-                test_loss = vae_loss_function(recon_batch, x_batch, mu, logvar, beta=0.01)
+                cond_batch = cond_batch.to(device)
+
+                recon_batch, mu, logvar = model(x_batch, cond_batch)
+                test_loss = vae_loss_function(
+                    recon_batch, x_batch, mu, logvar, beta=0.01
+                )
                 total_test_loss += test_loss.item()
-                
+
         avg_test_loss = total_test_loss / len(test_loader.dataset)
         test_loss_history.append(avg_test_loss)
-        
+
         if (epoch + 1) % 10 == 0:
-            print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_epoch_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
+            print(
+                f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_epoch_loss:.4f} | Test Loss: {avg_test_loss:.4f}"
+            )
 
     cv_results.append({
         "fold": fold + 1,
         "final_train_loss": loss_history[-1],
         "final_test_loss": test_loss_history[-1],
         "train_loss_history": loss_history,
-        "test_loss_history": test_loss_history
+        "test_loss_history": test_loss_history,
     })
 
 # Summary across folds
@@ -726,12 +713,11 @@ all_targets = []
 
 # Collect all test predictions and targets
 with torch.no_grad():
-    for x_batch, year_batch, dc_batch, _ in test_loader:
+    for x_batch, cond_batch, _ in test_loader:
         x_batch = x_batch.to(device)
-        year_batch = year_batch.to(device)
-        dc_batch = dc_batch.to(device)
+        cond_batch = cond_batch.to(device)
         
-        recon_batch, _, _ = model(x_batch, year_batch, dc_batch)
+        recon_batch, _, _ = model(x_batch, cond_batch)
         all_recons.append(recon_batch.cpu().numpy())
         all_targets.append(x_batch.cpu().numpy())
 
@@ -766,13 +752,12 @@ latents = []
 eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
 
 with torch.no_grad():
-    for x_batch, year_batch, dc_batch, _ in eval_train_loader: 
+    for x_batch, cond_batch, _ in eval_train_loader:
         x_batch = x_batch.to(device)
-        year_batch = year_batch.to(device)
-        dc_batch = dc_batch.to(device)
-        
-        # Extract mean vector (z_mu)
-        _, mu, _ = model(x_batch, year_batch, dc_batch)
+        cond_batch = cond_batch.to(device)
+
+        # Extract mean vector (z_mu) directly from encoder
+        mu, _ = model.encode(x_batch, cond_batch)
         latents.append(mu.cpu().numpy())
 
 # Convert to DataFrame
@@ -782,22 +767,26 @@ z_df = pd.DataFrame(np.vstack(latents), columns=latent_cols)
 
 
 ```{python}
-
 # Create non-shuffled evaluation DataLoaders
-eval_train_loader = DataLoader(train_dataset, batch_size=128, shuffle=False)
-eval_test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+eval_train_loader = DataLoader(
+    train_loader.dataset, batch_size=128, shuffle=False
+)
+eval_test_loader = DataLoader(test_loader.dataset, batch_size=128, shuffle=False)
 
-# Updated extraction function pulling Z and Y together
+
+# Extraction function pulling Z and Y using continuous conditions
 def get_latents_and_targets(loader):
     model.eval()
     Z, Y = [], []
     with torch.no_grad():
-        for x_b, year_b, dc_b, y_b in loader:
-            _, mu, _ = model(x_b.to(device), year_b.to(device), dc_b.to(device))
+        for x_b, cond_b, y_b in loader:
+            # Extract mean vector (z_mu) directly via encoder
+            mu, _ = model.encode(x_b.to(device), cond_b.to(device))
             Z.append(mu.cpu().numpy())
-            Y.append(y_b.numpy()) 
-            
+            Y.append(y_b.numpy())
+
     return np.vstack(Z), np.concatenate(Y)
+
 
 # Extract aligned representations and targets
 Z_train, y_train = get_latents_and_targets(eval_train_loader)
@@ -808,7 +797,10 @@ clf = LogisticRegression(class_weight="balanced", max_iter=1000)
 clf.fit(Z_train, y_train)
 
 preds = clf.predict_proba(Z_test)[:, 1]
-print(f"Test ROC-AUC using ONLY 8 Latent Dimensions ({cl_name}): {roc_auc_score(y_test, preds):.4f}")
+print(
+    f"Test ROC-AUC using ONLY {Z_train.shape[1]} Latent Dimensions"
+    f" ({cl_name}): {roc_auc_score(y_test, preds):.4f}"
+)
 
 # Custom accuracy report
 mlu.model_accuracy_report(clf, Z_train, y_train, Z_test, y_test)
@@ -819,36 +811,43 @@ mlu.model_accuracy_report(clf, Z_train, y_train, Z_test, y_test)
 ```{python}
 model.eval()
 
-x_real, year_real, dc_bin_real, _ = next(iter(eval_test_loader))
+# Retrieve scaler objects from fold_data if not defined globally
+pt = fold_data["scaler"]
+cond_scaler = fold_data["cond_scaler"]
+feature_cols = fold_data["feature_cols"]
+
+# Unpack aligned test batch (x, scaled_conditions, target)
+x_real, cond_real, _ = next(iter(eval_test_loader))
 x_real = x_real.to(device)
-year_real = year_real.to(device)
-dc_bin_real = dc_bin_real.to(device)
+cond_real = cond_real.to(device)
 
 with torch.no_grad():
-    # Encode county into intrinsic z using baseline bin
-    mu_z, _ = model.encode(x_real, year_real, dc_bin_real)
-    
-    # Reconstruct baseline features
-    x_baseline_recon = model.decode(mu_z, year_real, dc_bin_real)
-    
-    # Step up datacenter bin by +1
-    dc_bin_cf = torch.clamp(dc_bin_real + 2, max=6)
-    
-    # Decode using modified condition vector
-    x_cf_recon = model.decode(mu_z, year_real, dc_bin_cf)
 
-# Transform predictions to original units
+    mu_z, _ = model.encode(x_real, cond_real)
+
+    x_baseline_recon = model.decode(mu_z, cond_real)
+
+    cond_unscaled = cond_scaler.inverse_transform(cond_real.cpu().numpy())
+    year_raw = cond_unscaled[:, 0]
+    dc_raw = cond_unscaled[:, 1]
+
+    dc_cf_raw = dc_raw + 2
+
+    cond_cf_unscaled = np.column_stack([year_raw, dc_cf_raw])
+    cond_cf_scaled = cond_scaler.transform(cond_cf_unscaled)
+    cond_cf = torch.tensor(cond_cf_scaled, dtype=torch.float32, device=device)
+
+    x_cf_recon = model.decode(mu_z, cond_cf)
+
+# Transform predictions back to original feature units
 baseline_features = pt.inverse_transform(x_baseline_recon.cpu().numpy())
 cf_features = pt.inverse_transform(x_cf_recon.cpu().numpy())
 
-# Measure predicted economic impact
 impact_df = pd.DataFrame(cf_features - baseline_features, columns=feature_cols)
-# Filter out counties that are already in the highest bin (Bin 6)
-non_max_mask = (dc_bin_real < 4).cpu().numpy()
 
-# Calculate impact only for counties that actually received an intervention
-valid_impact_df = impact_df[non_max_mask]
-
-print(f"--- Top Predicted Economic Impacts (+2 DC Tier) for Non-Max Counties ({cl_name}) ---")
-print(valid_impact_df.mean().sort_values(ascending=False).head(25))
+print(
+    f"--- Top Predicted Economic Impacts (+2 DCs) for {cl_name} (Test Batch)"
+    " ---"
+)
+print(impact_df.mean().sort_values(ascending=False).head(25))
 ```
