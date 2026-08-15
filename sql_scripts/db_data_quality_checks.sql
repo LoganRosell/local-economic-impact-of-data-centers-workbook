@@ -176,6 +176,20 @@ WHERE county_id IN (
 );
 
 
+-- Check for missing counties in air_quality in 2020
+SELECT DISTINCT 
+    county_id,
+    county_name,
+    state,
+    functional_status,
+    fips_class_code
+FROM us_counties
+WHERE CAST(county_id AS varchar) IN (
+    SELECT CAST(county_id AS varchar) FROM us_counties
+    EXCEPT
+    SELECT CAST(county_id AS varchar) FROM air_quality WHERE year = 2020
+);
+
 -- For each county which is not present in all tables, show which specific tables it is missing from
 WITH county_presence AS (
     SELECT 
