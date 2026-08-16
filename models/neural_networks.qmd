@@ -431,6 +431,8 @@ def prepare_spatial_data_fold(
             "datacenters",
             "dc_bin",
             "has_datacenter",
+            "datacenters_per_100_sqmi",
+            "county_mode_cluster"
         ]
 
     feature_cols = [c for c in df.columns if c not in condition_cols]
@@ -582,7 +584,7 @@ print(f"Using device: {device}")
 
 # ============= update cluster =================
 # Target dataframe (cluster 1 or 0)
-cl = 1
+cl = 0
 if cl == 0:
     cl_name = "cluster_0"
     target_df = cluster_0_df.reset_index(drop=True)
@@ -606,7 +608,10 @@ for fold, (train_idx, test_idx) in enumerate(
 
     # Prepare data loaders and dimensions specifically for this fold
     fold_data = prepare_spatial_data_fold(
-        df=target_df, train_idx=train_idx, test_idx=test_idx, batch_size=1024
+        df=target_df,
+        train_idx=train_idx,
+        test_idx=test_idx,
+        batch_size=1024
     )
 
     train_loader = fold_data["train_loader"]
