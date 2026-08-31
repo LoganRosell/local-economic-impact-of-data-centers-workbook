@@ -4,8 +4,6 @@ US_Counties_Centroids.csv : https://gis.data.chhs.ca.gov/
 
 county_2020_fips_codes.csv : https://www.census.gov/library/reference/code-lists/ansi.html#cou
 
-im3_open_source_data_center_atlas : https://www.osti.gov/biblio/2550666
-
 Daily_County-Level_PM2.5_Concentrations_2001-2022_20260611.csv : https://data.cdc.gov/Environmental-Health-Toxicology/Daily-County-Level-PM2-5-Concentrations-2001-2022/53mz-4zqd/about_data
 
 personal_income_data.csv : https://www.bea.gov/data/income-saving/personal-income-by-county
@@ -19,8 +17,6 @@ us.1990_2024.20ages.adjusted.txt : https://seer.cancer.gov/popdata.thru.2023/dow
 Residential_Construction_Permits_by_County_6297027898887955680.csv : https://catalog.data.gov/dataset/residential-construction-permits-by-county
 
 Unemployment2023.csv : https://www.ers.usda.gov/data-products/county-level-data-sets/county-level-data-sets-download-data
-
-water_data : https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily
 
 2022 NAICS: https://www.census.gov/naics/?58967?yearbck=2022
 
