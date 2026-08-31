@@ -79,8 +79,8 @@ Many of these figures are extremly left skewed by a few wealthy/populous countie
 ### Checking Intra-Data-Source Correlation
 
 ```{python}
-sns.pairplot(df, corner=True)
-plt.show()
+# sns.pairplot(df, corner=True)
+# plt.show()
 ```
 
 
