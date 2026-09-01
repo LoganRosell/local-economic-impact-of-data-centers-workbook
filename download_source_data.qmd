@@ -8,7 +8,7 @@ execute:
 
 # Download Raw Data Sources
 
-Run this notebook to fetch all raw dataset files directly into the `shared_data_test_sandbox` folder for testing.
+Run this notebook to fetch all raw dataset files directly into the `shared_data`.
 
 ```{python}
 import concurrent.futures
@@ -35,7 +35,7 @@ def find_repo_root():
     return Path.cwd()
 
 ROOT_DIR = find_repo_root()
-BASE_DIR = ROOT_DIR / "shared_data_test_sandbox"
+BASE_DIR = ROOT_DIR / "shared_data"
 
 # Standard User-Agent to prevent 403 / 502 gateway errors from federal servers
 HTTP_HEADERS = {
