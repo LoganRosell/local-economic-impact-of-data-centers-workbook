@@ -1,0 +1,347 @@
+---
+title: "Data Acquisition Pipeline"
+format: html
+execute:
+  echo: true
+  warning: false
+---
+
+# Download Raw Data Sources
+
+Run this notebook to fetch all raw dataset files directly into the `shared_data_test_sandbox` folder for testing.
+
+```{python}
+import concurrent.futures
+import gzip
+import io
+import re
+import shutil
+import sys
+import time
+import zipfile
+from pathlib import Path
+from urllib.parse import urljoin
+import pandas as pd
+import requests
+from tqdm import tqdm
+
+# Discover project root and isolate outputs strictly to the test sandbox directory
+def find_repo_root():
+    p = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
+    while p != p.parent:
+        if (p / "requirements.txt").exists() or (p / ".git").exists():
+            return p
+        p = p.parent
+    return Path.cwd()
+
+ROOT_DIR = find_repo_root()
+BASE_DIR = ROOT_DIR / "shared_data_test_sandbox"
+
+# Standard User-Agent to prevent 403 / 502 gateway errors from federal servers
+HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+}
+
+def extract_qcew_518(zip_path: Path, output_csv_path: Path):
+    """Stream-extracts only NAICS code 518 rows from a quarterly BLS singlefile zip."""
+    with zipfile.ZipFile(zip_path) as z:
+        member = next((m for m in z.namelist() if m.endswith(".csv")), None)
+        if member:
+            with z.open(member) as f:
+                chunks = []
+                for chunk in pd.read_csv(f, chunksize=100000, low_memory=False, dtype={"industry_code": str, "area_fips": str}):
+                    filtered = chunk[chunk["industry_code"] == "518"]
+                    if not filtered.empty:
+                        chunks.append(filtered)
+                if chunks:
+                    df = pd.concat(chunks, ignore_index=True)
+                    df.to_csv(output_csv_path, index=False)
+                    print(f"  -> Extracted NAICS 518 data to '{output_csv_path.name}' ({len(df):,} rows)")
+                    return True
+        raise FileNotFoundError("Could not find CSV singlefile in quarterly BLS zip archive.")
+
+# --- Dynamic Resolvers for Fragile Links ---
+
+
+def resolve_usda_unemployment():
+    print("Resolving current USDA Unemployment link...")
+    url = "https://www.ers.usda.gov/data-products/county-level-data-sets/county-level-data-sets-download-data/"
+    r = requests.get(url, headers=HTTP_HEADERS, timeout=15)
+    r.raise_for_status()
+    # Match CSV download link with optional query parameters (?v=...)
+    match = re.search(r'href="([^" ]*unemployment[^" ]*\.csv(?:\?[^" ]*)?)"', r.text, re.IGNORECASE)
+    if match:
+        link = urljoin(url, match.group(1))
+        print(f"  -> Resolved USDA URL: {link}")
+        return link
+    raise ValueError("Could not find USDA Unemployment CSV link on the download page.")
+
+def resolve_seer_population():
+    print("Resolving current SEER Population link...")
+    canonical_url = "https://seer.cancer.gov/popdata/yr1990_2024.20ages/us.1990_2024.20ages.adjusted.txt.gz"
+    url = "https://seer.cancer.gov/popdata/download.html"
+    try:
+        r = requests.get(url, headers=HTTP_HEADERS, timeout=10)
+        r.raise_for_status()
+        match = re.search(r'href="([^" ]+us\.1990[^" ]+\.20ages\.adjusted\.txt\.gz)"', r.text, re.IGNORECASE)
+        if match:
+            link = urljoin(url, match.group(1))
+            print(f"  -> Scraped SEER URL: {link}")
+            return link
+    except Exception as e:
+        print(f"  -> Note: SEER landing page returned ({e}), falling back to canonical URL.")
+    
+    print(f"  -> Using canonical SEER URL: {canonical_url}")
+    return canonical_url
+
+
+# --- Download Configuration ---
+
+DOWNLOAD_CONFIG = [
+    # County Codes, Geography, & Spatial Lookups
+    {
+        "url": "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json",
+        "folder": BASE_DIR / "county_fips_codes",
+        "filename": "geojson_counties_fips.json",
+    },
+    {
+        "url": "https://opendata.arcgis.com/api/v3/datasets/7495f87cfe1040468238b5b73042da9f_1/downloads/data?format=csv&spatialRefId=4326&where=1%3D1",
+        "folder": BASE_DIR / "county_fips_codes",
+        "filename": "US_Counties_Centroids.csv",
+    },
+    {
+        "url": "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt",
+        "folder": BASE_DIR / "county_fips_codes",
+        "filename": "county_2020_fips_codes.csv",
+    },
+    {
+        "url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2021_Gazetteer/2021_Gaz_counties_national.zip",
+        "folder": BASE_DIR / "county_fips_codes",
+        "filename": "2021_Gaz_counties_national.txt",
+        "extract_pattern": "2021_Gaz_counties_national",
+    },
+    {
+        "url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/2025_Gaz_counties_national.zip",
+        "folder": BASE_DIR / "county_fips_codes",
+        "filename": "census_gazetteer_2025_county_sizes.txt",
+        "extract_pattern": "2025_Gaz_counties_national",
+    },
+    # CDC Air Quality (PM2.5)
+    {
+        "url": "https://data.cdc.gov/api/views/53mz-4zqd/rows.csv?accessType=DOWNLOAD",
+        "folder": BASE_DIR / "air",
+        "filename": "Daily_County-Level_PM2.5_Concentrations_2001-2022_20260611.csv",
+        "parallel_connections": 8,
+    },
+    # BEA Economic Indicators
+    {
+        "url": "https://apps.bea.gov/regional/zip/CAINC1.zip",
+        "folder": BASE_DIR / "personal_income",
+        "filename": "personal_income_data.csv",
+        "extract_pattern": "ALL_AREAS",
+    },
+    {
+        "url": "https://apps.bea.gov/regional/zip/CAGDP1.zip",
+        "folder": BASE_DIR / "gdp",
+        "filename": "gdp_data.csv",
+        "extract_pattern": "ALL_AREAS",
+    },
+    # HUD Residential Construction Permits
+    {
+        "url": "https://opendata.arcgis.com/api/v3/datasets/da836467b4904711b14d74acbc4568be_24/downloads/data?format=csv&spatialRefId=4326&where=1%3D1",
+        "folder": BASE_DIR / "construction_permits",
+        "filename": "Residential_Construction_Permits_by_County_6297027898887955680.csv",
+    },
+    # USDA Unemployment
+    {
+        "url": "DYNAMIC_USDA",
+        "folder": BASE_DIR / "unemployment_and_income",
+        "filename": "Unemployment2023.csv",
+    },
+    # SEER Population (uncompressed to .txt)
+    {
+        "url": "DYNAMIC_SEER",
+        "folder": BASE_DIR / "population",
+        "filename": "us.1990_2024.20ages.adjusted.txt",
+        "decompress_gzip": True,
+    }
+]
+
+# Census Business Patterns (CBP) 2001–2022
+for year in range(2001, 2023):
+    yy = str(year)[2:]
+    DOWNLOAD_CONFIG.append({
+        "url": f"https://www2.census.gov/programs-surveys/cbp/datasets/{year}/cbp{yy}co.zip",
+        "folder": BASE_DIR / "business_patterns",
+        "filename": f"cbp{yy}co.txt",
+        "extract_pattern": f"cbp{yy}co",
+    })
+
+# BLS QCEW (2004–2025): Download quarterly singlefile zip and extract NAICS 518 data only
+for year in range(2004, 2026):
+    DOWNLOAD_CONFIG.append({
+        "url": f"https://data.bls.gov/cew/data/files/{year}/csv/{year}_qtrly_singlefile.zip",
+        "folder": BASE_DIR / "qrtly_census_emp_and_wages",
+        "filename": f"{year}_q1_q4_naics_518_data_only.csv",
+        "qcew_extract_518": True,
+        "delay_after": 0.5,
+    })
+
+
+# --- Download Execution Logic ---
+
+def _download_chunk(url: str, start: int, end: int, target_path: Path, pbar: tqdm, timeout: tuple):
+    headers = {**HTTP_HEADERS, "Range": f"bytes={start}-{end}"}
+    with requests.get(url, headers=headers, stream=True, timeout=timeout) as r:
+        r.raise_for_status()
+        with open(target_path, "r+b") as f:
+            f.seek(start)
+            for chunk in r.iter_content(chunk_size=1048576):
+                if chunk:
+                    f.write(chunk)
+                    pbar.update(len(chunk))
+
+def download_file(item: dict, timeout: tuple = (10, 120)):
+    target_path = item["folder"] / item["filename"]
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if target_path.exists():
+        print(f"Skipping {target_path.name} (already exists)")
+        return True
+
+    # Process dynamic URLs just-in-time
+    url = item["url"]
+    if url == "DYNAMIC_USDA":
+        url = resolve_usda_unemployment()
+    elif url == "DYNAMIC_SEER":
+        url = resolve_seer_population()
+
+    print(f"Downloading {target_path.name} from {url}...")
+
+    # Pattern extraction from Zip (case-insensitive member matching)
+    if "extract_pattern" in item:
+        temp_zip_path = target_path.with_suffix(".temp.zip")
+        try:
+            with requests.get(url, headers=HTTP_HEADERS, stream=True, timeout=timeout) as response:
+                response.raise_for_status()
+                with open(temp_zip_path, "wb") as f_zip:
+                    for chunk in response.iter_content(chunk_size=1048576):
+                        if chunk:
+                            f_zip.write(chunk)
+            with zipfile.ZipFile(temp_zip_path) as z:
+                pattern = item["extract_pattern"].lower()
+                member = next((f for f in z.namelist() if pattern in f.lower() and not f.endswith("/")), None)
+                if member:
+                    with z.open(member) as src, open(target_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    print(f"  -> Extracted '{member}' to '{target_path.name}' ({target_path.stat().st_size:,} bytes)")
+                    return True
+                else:
+                    raise FileNotFoundError(f"Could not find entry matching '{item['extract_pattern']}' in zip")
+        finally:
+            if temp_zip_path.exists():
+                temp_zip_path.unlink()
+
+    # Gzip decompression (for SEER population)
+    if item.get("decompress_gzip"):
+        temp_gz_path = target_path.with_suffix(".temp.gz")
+        try:
+            for attempt in range(3):
+                try:
+                    with requests.get(url, headers=HTTP_HEADERS, stream=True, timeout=timeout) as response:
+                        response.raise_for_status()
+                        total_size = int(response.headers.get("content-length", 0))
+                        with open(temp_gz_path, "wb") as f_gz, tqdm(total=total_size, unit="B", unit_scale=True, desc=temp_gz_path.name) as bar:
+                            for chunk in response.iter_content(chunk_size=1048576):
+                                if chunk:
+                                    f_gz.write(chunk)
+                                    bar.update(len(chunk))
+                    break
+                except requests.exceptions.RequestException as e:
+                    if attempt == 2:
+                        raise e
+                    print(f"  -> Download attempt {attempt + 1} failed ({e}), retrying in 3s...")
+                    time.sleep(3)
+
+            print(f"  -> Decompressing {temp_gz_path.name} to {target_path.name}...")
+            with gzip.open(temp_gz_path, "rb") as src, open(target_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            print(f"  -> Decompressed to '{target_path.name}' ({target_path.stat().st_size:,} bytes)")
+            return True
+        finally:
+            if temp_gz_path.exists():
+                temp_gz_path.unlink()
+
+    # QCEW NAICS 518 in-stream extraction from Zip
+    if item.get("qcew_extract_518"):
+        temp_zip_path = target_path.with_suffix(".temp.zip")
+        try:
+            with requests.get(url, headers=HTTP_HEADERS, stream=True, timeout=timeout) as response:
+                response.raise_for_status()
+                total_size = int(response.headers.get("content-length", 0))
+                with open(temp_zip_path, "wb") as f_zip, tqdm(total=total_size, unit="B", unit_scale=True, desc=f"{item['filename']} (zip)") as bar:
+                    for chunk in response.iter_content(chunk_size=1048576):
+                        if chunk:
+                            f_zip.write(chunk)
+                            bar.update(len(chunk))
+            extract_qcew_518(temp_zip_path, target_path)
+            return True
+        finally:
+            if temp_zip_path.exists():
+                temp_zip_path.unlink()
+
+
+    # Multi-connection parallel download if configured
+    connections = item.get("parallel_connections", 1)
+    if connections > 1:
+        try:
+            head_resp = requests.head(url, headers=HTTP_HEADERS, allow_redirects=True, timeout=(10, 30))
+            head_resp.raise_for_status()
+            total_size = int(head_resp.headers.get("content-length", 0))
+            
+            probe_headers = {**HTTP_HEADERS, "Range": "bytes=0-10"}
+            with requests.get(url, headers=probe_headers, stream=True, timeout=(10, 30)) as probe_resp:
+                supports_ranges = (probe_resp.status_code == 206)
+
+            if supports_ranges and total_size > 0:
+                print(f"  -> Using {connections} parallel connections...")
+                with open(target_path, "wb") as f:
+                    f.truncate(total_size)
+                chunk_size = total_size // connections
+                ranges = [(i * chunk_size, (i * chunk_size + chunk_size - 1) if i < connections - 1 else total_size - 1) for i in range(connections)]
+                with tqdm(total=total_size, unit="B", unit_scale=True, desc=target_path.name) as pbar:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=connections) as executor:
+                        futures = [executor.submit(_download_chunk, url, start, end, target_path, pbar, timeout) for start, end in ranges]
+                        concurrent.futures.wait(futures)
+                return True
+        except Exception:
+            print("  -> Parallel check failed. Falling back to single stream.")
+
+    # Standard stream download
+    with requests.get(url, headers=HTTP_HEADERS, stream=True, timeout=timeout) as response:
+        response.raise_for_status()
+        total_size = int(response.headers.get("content-length", 0))
+        with open(target_path, "wb") as f, tqdm(total=total_size, unit="B", unit_scale=True, desc=target_path.name) as bar:
+            for chunk in response.iter_content(chunk_size=1048576):
+                if chunk:
+                    f.write(chunk)
+                    bar.update(len(chunk))
+
+    if "delay_after" in item:
+        time.sleep(item["delay_after"])
+    return True
+
+if __name__ == "__main__":
+    print(f"Total files scheduled: {len(DOWNLOAD_CONFIG)}")
+    results = {}
+    for item in DOWNLOAD_CONFIG:
+        try:
+            download_file(item)
+            results[item["filename"]] = "SUCCESS"
+        except Exception as e:
+            print(f"Failed to acquire {item['filename']}: {e}")
+            results[item["filename"]] = f"FAILED: {e}"
+
+    failed = [k for k, v in results.items() if v != "SUCCESS"]
+    print(f"\nCompleted! Success: {len(results) - len(failed)} / {len(results)}. Failures: {len(failed)}")
+```

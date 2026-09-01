@@ -206,7 +206,7 @@ disappeared_counties = list(all_2019_counties ^ all_2020_counties)
 
 # Update these:
 eda_table_name = "Air Quality"
-cols_to_use = [3,7]
+cols_to_use = [15,19]
 
 ## one map per column
 for i in cols_to_use:
