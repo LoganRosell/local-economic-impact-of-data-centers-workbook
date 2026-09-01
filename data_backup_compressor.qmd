@@ -1,0 +1,253 @@
+---
+title: "Source Data Parquet Backup & Restore Utility"
+format: html
+execute:
+  echo: true
+  warning: false
+---
+
+# Source Data Parquet Backup and Restore
+
+This notebook provides two distinct tools:
+1. **Compress Source Data to Parquet:** Scans raw data files (`.csv`, `.txt`, `.json`) across all domain subfolders in `shared_data`, converts them into high-compression `.parquet` files (using Zstandard compression), and saves them into a mirrored `parquet_backups/` directory.
+2. **Restore Parquet Backups to CSV / Raw Format:** Reads the backup `.parquet` files and reconstructs the original CSV/text files directly into their respective domain directories.
+
+---
+
+## 1. Compress Source Data to Parquet
+
+Run this block to back up all raw datasets into compact `.parquet` files.
+
+```{python}
+import os
+import time
+from pathlib import Path
+from dotenv import load_dotenv
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+# Load environment configuration
+load_dotenv()
+
+def find_repo_root():
+    p = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
+    while p != p.parent:
+        if (p / "requirements.txt").exists() or (p / ".git").exists():
+            return p
+        p = p.parent
+    return Path.cwd()
+
+# Discover shared_data directory
+ROOT_DIR = find_repo_root()
+env_data_dir = os.getenv("DATA_DIR")
+DATA_DIR = Path(env_data_dir) if env_data_dir else (ROOT_DIR / "shared_data")
+BACKUP_DIR = DATA_DIR / "parquet_backups"
+
+print(f"Source Directory: {DATA_DIR}")
+print(f"Backup Directory: {BACKUP_DIR}\n")
+
+def compress_file_to_parquet(src_path: Path, dst_path: Path, chunk_size: int = 250000) -> dict:
+    """Compresses a single CSV, TSV, or text file into a Parquet file using Zstandard compression."""
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    orig_size = src_path.stat().st_size
+    t0 = time.time()
+    
+    # 1. Plain text / fixed-width / JSON files (e.g. population, geojson, layout docs)
+    if src_path.suffix in [".json"] or ("population" in str(src_path) and src_path.suffix == ".txt"):
+        writer = None
+        with open(src_path, "r", encoding="utf-8", errors="replace") as f:
+            batch = []
+            for line in f:
+                batch.append(line.rstrip("\r\n"))
+                if len(batch) >= chunk_size:
+                    table = pa.Table.from_pandas(pd.DataFrame({"raw_line": batch}))
+                    if writer is None:
+                        writer = pq.ParquetWriter(dst_path, table.schema, compression="zstd")
+                    writer.write_table(table)
+                    batch = []
+            if batch:
+                table = pa.Table.from_pandas(pd.DataFrame({"raw_line": batch}))
+                if writer is None:
+                    writer = pq.ParquetWriter(dst_path, table.schema, compression="zstd")
+                writer.write_table(table)
+            if writer:
+                writer.close()
+    else:
+        # 2. Delimited tabular files (.csv, .txt tab/comma separated)
+        sep = "\t" if "Gaz" in src_path.name else ","
+        writer = None
+        
+        # Try UTF-8 first, fallback to Latin-1 for BEA files
+        for encoding in ["utf-8", "latin-1"]:
+            try:
+                for chunk in pd.read_csv(src_path, sep=sep, encoding=encoding, chunksize=chunk_size, low_memory=False, dtype=str):
+                    table = pa.Table.from_pandas(chunk)
+                    if writer is None:
+                        writer = pq.ParquetWriter(dst_path, table.schema, compression="zstd")
+                    writer.write_table(table)
+                break
+            except UnicodeDecodeError:
+                if encoding == "latin-1":
+                    raise
+                continue
+                
+        if writer:
+            writer.close()
+
+    pq_size = dst_path.stat().st_size
+    elapsed = time.time() - t0
+    saved_pct = ((orig_size - pq_size) / orig_size) * 100 if orig_size > 0 else 0
+    return {
+        "file": src_path.name,
+        "folder": src_path.parent.name,
+        "orig_bytes": orig_size,
+        "pq_bytes": pq_size,
+        "saved_pct": saved_pct,
+        "time_s": elapsed
+    }
+
+# Execute compression across all subdirectories
+results = []
+subdirs = [d for d in DATA_DIR.iterdir() if d.is_dir() and not d.name.startswith(".") and d.name != "parquet_backups"]
+
+print("=" * 90)
+print("STARTING PARQUET COMPRESSION PIPELINE")
+print("=" * 90)
+
+total_orig_bytes = 0
+total_pq_bytes = 0
+
+for folder in sorted(subdirs):
+    data_files = [f for f in folder.iterdir() if f.is_file() and f.suffix in [".csv", ".txt", ".json"] and not f.name.startswith(".")]
+    # Skip huge uncompressed singlefiles if compressed _data_only.csv exists
+    has_filtered_qcew = any("_data_only.csv" in f.name for f in data_files)
+    
+    for f in sorted(data_files):
+        if has_filtered_qcew and ".singlefile.csv" in f.name:
+            continue  # Skip 45GB uncompressed singlefiles in favor of filtered 518 data
+            
+        target_parquet = BACKUP_DIR / folder.name / f"{f.name}.parquet"
+        try:
+            res = compress_file_to_parquet(f, target_parquet)
+            results.append(res)
+            total_orig_bytes += res["orig_bytes"]
+            total_pq_bytes += res["pq_bytes"]
+            print(f"[{res['folder']}] {res['file']:<50} | {res['orig_bytes']:>12,} B -> {res['pq_bytes']:>10,} B ({res['saved_pct']:>5.1f}% saved) [{res['time_s']:.2f}s]")
+        except Exception as e:
+            print(f"FAILED: [{folder.name}] {f.name} -> {e}")
+
+overall_saved_pct = ((total_orig_bytes - total_pq_bytes) / total_orig_bytes) * 100 if total_orig_bytes > 0 else 0
+print("\n" + "=" * 90)
+print(f"COMPRESSION SUMMARY:")
+print(f"Total Files Compressed: {len(results)}")
+print(f"Original Total Size:    {total_orig_bytes:,} bytes ({total_orig_bytes / (1024**3):.2f} GB)")
+print(f"Parquet Total Size:     {total_pq_bytes:,} bytes ({total_pq_bytes / (1024**3):.2f} GB)")
+print(f"Total Space Saved:      {total_orig_bytes - total_pq_bytes:,} bytes ({overall_saved_pct:.1f}% reduction)")
+print("=" * 90)
+```
+
+---
+
+## 2. Restore Parquet Backups to CSV / Raw Format
+
+Run this block to uncompress and restore all `.parquet` backup files back to their original `.csv` and `.txt` formats.
+
+```{python}
+import os
+import time
+from pathlib import Path
+from dotenv import load_dotenv
+import pandas as pd
+import pyarrow.parquet as pq
+
+# Load environment configuration
+load_dotenv()
+
+def find_repo_root():
+    p = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
+    while p != p.parent:
+        if (p / "requirements.txt").exists() or (p / ".git").exists():
+            return p
+        p = p.parent
+    return Path.cwd()
+
+# Discover directories
+ROOT_DIR = find_repo_root()
+env_data_dir = os.getenv("DATA_DIR")
+DATA_DIR = Path(env_data_dir) if env_data_dir else (ROOT_DIR / "shared_data")
+BACKUP_DIR = DATA_DIR / "parquet_backups"
+
+print(f"Restoring From: {BACKUP_DIR}")
+print(f"Destination:    {DATA_DIR}\n")
+
+def uncompress_parquet_to_file(src_path: Path, dst_path: Path, chunk_size: int = 250000, overwrite: bool = True) -> dict:
+    """Restores a Parquet file back to its original CSV, TSV, or raw text format."""
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    if dst_path.exists() and not overwrite:
+        return {"file": dst_path.name, "folder": dst_path.parent.name, "bytes": dst_path.stat().st_size, "status": "SKIPPED (already exists)", "time_s": 0}
+        
+    t0 = time.time()
+    pq_file = pq.ParquetFile(src_path)
+    schema_cols = pq_file.schema.names
+
+    # 1. Plain text / fixed-width / JSON lines
+    if schema_cols == ["raw_line"]:
+        with open(dst_path, "w", encoding="utf-8") as f:
+            for batch in pq_file.iter_batches(batch_size=chunk_size):
+                df_batch = batch.to_pandas()
+                for line in df_batch["raw_line"]:
+                    f.write(line + "\n")
+    else:
+        # 2. Delimited tabular files
+        sep = "\t" if "Gaz" in dst_path.name else ","
+        is_first = True
+        with open(dst_path, "w", encoding="utf-8", newline="") as f:
+            for batch in pq_file.iter_batches(batch_size=chunk_size):
+                df_batch = batch.to_pandas()
+                df_batch.to_csv(f, sep=sep, index=False, header=is_first)
+                is_first = False
+
+    elapsed = time.time() - t0
+    return {
+        "file": dst_path.name,
+        "folder": dst_path.parent.name,
+        "bytes": dst_path.stat().st_size,
+        "status": "RESTORED",
+        "time_s": elapsed
+    }
+
+# Execute restoration across all backup subdirectories
+restored_files = []
+
+if not BACKUP_DIR.exists():
+    print(f"No backup directory found at {BACKUP_DIR}. Please run the compression block first.")
+else:
+    print("=" * 90)
+    print("STARTING PARQUET RESTORATION PIPELINE")
+    print("=" * 90)
+    
+    total_restored_bytes = 0
+    backup_subdirs = [d for d in BACKUP_DIR.iterdir() if d.is_dir() and not d.name.startswith(".")]
+
+    for folder in sorted(backup_subdirs):
+        pq_files = [f for f in folder.iterdir() if f.is_file() and f.name.endswith(".parquet") and not f.name.startswith(".")]
+        for pq_file in sorted(pq_files):
+            # Strip trailing .parquet extension to recover original filename
+            original_filename = pq_file.name[:-8] if pq_file.name.endswith(".parquet") else pq_file.stem
+            target_dst = DATA_DIR / folder.name / original_filename
+            
+            try:
+                res = uncompress_parquet_to_file(pq_file, target_dst, overwrite=True)
+                restored_files.append(res)
+                total_restored_bytes += res["bytes"]
+                print(f"[{res['folder']}] Restored {res['file']:<50} | {res['bytes']:>12,} B [{res['status']}] in {res['time_s']:.2f}s")
+            except Exception as e:
+                print(f"FAILED to restore: [{folder.name}] {pq_file.name} -> {e}")
+
+    print("\n" + "=" * 90)
+    print(f"RESTORATION SUMMARY:")
+    print(f"Total Files Restored: {len(restored_files)}")
+    print(f"Total Restored Size:  {total_restored_bytes:,} bytes ({total_restored_bytes / (1024**3):.2f} GB)")
+    print("=" * 90)
+```
